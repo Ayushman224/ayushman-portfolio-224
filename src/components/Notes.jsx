@@ -87,32 +87,73 @@ const Notes = () => {
     }
   };
 
-  // Notification Logic
+  // Notification Logic - Double Alert System (Instant + 30 Min Snooze)
   useEffect(() => {
     const checkTasks = () => {
-      const now = new Date();
-      const currentTimestamp = now.getTime();
+      const now = new Date().getTime();
       
       folders.forEach(folder => {
         folder.notes.forEach(note => {
           if (note.time && note.status !== 'Completed') {
             const taskTime = new Date(note.time).getTime();
-            if (taskTime <= currentTimestamp && !processedAlerts.includes(note.id)) {
-              setActiveAlerts(prev => [...prev, { ...note, folderName: folder.name }]);
+            const alertData = processedAlerts.find(a => a.id === note.id);
+
+            // Logic for triggering alerts
+            let shouldTrigger = false;
+            let newAlertObject = null;
+
+            if (!alertData && taskTime <= now) {
+              // Condition 1: First time alert (Instant)
+              shouldTrigger = true;
+              newAlertObject = { id: note.id, count: 1, lastTriggered: now };
+            } else if (alertData && alertData.count === 1 && now >= (alertData.lastTriggered + 30 * 60 * 1000)) {
+              // Condition 2: Second alert (30 minutes later)
+              shouldTrigger = true;
+              newAlertObject = { ...alertData, count: 2, lastTriggered: now };
+            }
+
+            if (shouldTrigger && newAlertObject) {
+              // A. Trigger UI Toast
+              setActiveAlerts(prev => {
+                // Prevent duplicate UI toasts for the same trigger
+                if (prev.some(p => p.id === note.id)) return prev;
+                return [...prev, { ...note, folderName: folder.name, alertCount: newAlertObject.count }];
+              });
+              
+              const alertMsg = newAlertObject.count === 1 
+                ? `Goal Started: ${note.title}` 
+                : `Snooze Reminder (30m): ${note.title}`;
+
+              // B. Trigger System Notification (PWA/Background)
               triggerSystemNotification(
-                `Task Started: ${note.title}`,
-                `Workspace Hub reminder for folder: ${folder.name}`
+                alertMsg,
+                `Workspace Hub: Task from folder ${folder.name}`
               );
-              setProcessedAlerts(prev => [...prev, note.id]);
+
+              // C. Trigger Service Worker (Native Phone Tray)
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                  type: 'SHOW_NOTIFICATION',
+                  title: alertMsg,
+                  body: `Review your progress in ${folder.name}`
+                });
+              }
+
+              // Update Persistent State
+              setProcessedAlerts(prev => {
+                const filtered = prev.filter(a => a.id !== note.id);
+                return [...filtered, newAlertObject];
+              });
             }
           }
         });
       });
     };
 
-    const interval = setInterval(checkTasks, 5000);
+    const interval = setInterval(checkTasks, 5000); // Check every 5 seconds
     return () => clearInterval(interval);
   }, [folders, processedAlerts]);
+
 
   // Enhanced Security: SHA-256 Hashing
   const ADMIN_HASH = "ab5aa97074c454a0632057e704220d9a6678fbf773a0a5806fc09b8173b07309";
