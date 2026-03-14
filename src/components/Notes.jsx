@@ -58,6 +58,30 @@ const Notes = () => {
     return `${hours > 0 ? hours + 'h ' : ''}${minutes}m ${seconds}s`;
   };
 
+  // Helper: Detect and highlight links in text
+  const renderContentWithLinks = (content) => {
+    if (!content) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    return parts.map((part, index) => {
+      if (urlRegex.test(part)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4 decoration-indigo-500/30 font-bold transition-all break-all inline-block"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   // Timer Effect
   useEffect(() => {
     let interval;
@@ -575,8 +599,8 @@ const Notes = () => {
                                 </div>
                               </div>
                               <div className="flex-1 overflow-y-auto max-h-40 sm:max-h-48 pr-2 custom-scrollbar-thin mb-6">
-                                <p className={`text-xs sm:text-sm leading-relaxed ${note.status === 'Completed' ? 'text-slate-600' : 'text-slate-400'}`}>
-                                  {note.content}
+                                <p className={`text-xs sm:text-sm leading-relaxed ${note.status === 'Completed' ? 'text-slate-600' : 'text-slate-400'} whitespace-pre-wrap`}>
+                                  {renderContentWithLinks(note.content)}
                                 </p>
                               </div>
                               <div className="space-y-3 sm:space-y-4 pt-4 border-t border-slate-800/40">
@@ -670,7 +694,11 @@ const Notes = () => {
                             <div className="flex flex-col gap-1.5"><div className="flex items-center gap-2"><User className="w-4 h-4 text-indigo-400" /><span className="text-sm font-black text-slate-100">{contact.name}</span></div><div className="flex items-center gap-2"><Mail className="w-4 h-4 text-violet-400" /><span className="text-[10px] sm:text-xs font-bold text-slate-400 truncate max-w-[200px]">{contact.email}</span></div></div>
                             <div className="flex items-center justify-between sm:justify-end gap-4"><span className="text-[9px] sm:text-[10px] text-slate-600 font-mono italic">{contact.timestamp}</span><button onClick={() => deleteContact(contact.id)} className="p-2 text-red-500/40 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button></div>
                           </div>
-                          <div className="bg-slate-950 p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-slate-800 inset-shadow-inner text-left"><p className="text-slate-300 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">{contact.message}</p></div>
+                          <div className="bg-slate-950 p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-slate-800 inset-shadow-inner text-left">
+                            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
+                              {renderContentWithLinks(contact.message)}
+                            </p>
+                          </div>
                         </div>
                       ))
                     )}
