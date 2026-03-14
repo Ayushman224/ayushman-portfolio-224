@@ -1,7 +1,10 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Linkedin, MapPin, Phone } from 'lucide-react';
 
 const Hero = () => {
+  const [resumeUrl, setResumeUrl] = useState(() => localStorage.getItem('portfolio-resume-url'));
+
   return (
     <section id="home" className="min-h-screen flex items-center justify-center pt-20 pb-10 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background decoration */}
@@ -17,17 +20,28 @@ const Hero = () => {
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-4">
             Hi, I'm <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">Ayushman Tripathi</span>
           </h1>
-          <h2 className="text-2xl md:text-3xl font-medium text-slate-300 mb-6">
-            Software Developer
+          <h2 className="text-2xl md:text-3xl font-medium text-slate-300 mb-6 uppercase tracking-widest">
+            Full Stack Developer
           </h2>
-          <p className="text-lg text-slate-400 mb-8 max-w-2xl mx-auto leading-relaxed">
-            Specializing in **React** and **Tailwind CSS**, I am focused on building scalable, high-performance web applications with clean UI, efficient state management, and seamless API integration. Currently leveraging **Python** for robust automation and expanding into full-stack backend architectures.
+          <p className="text-lg text-slate-400 mb-8 max-w-3xl mx-auto leading-relaxed">
+            I build high-performance, scalable applications using <span className="text-indigo-400 font-bold">React</span>, <span className="text-indigo-400 font-bold">Tailwind CSS</span>, and <span className="text-indigo-400 font-bold">Node.js</span>. My expertise covers full-stack development with <span className="text-indigo-400 font-bold">Express</span> and <span className="text-indigo-400 font-bold">SQL</span> architectures, alongside robust <span className="text-indigo-400 font-bold">Python</span> automation scripts to streamline complex workflows.
           </p>
           
           <div className="flex flex-wrap justify-center gap-4 mb-12">
             <a href="/#projects" className="px-8 py-3 rounded-full bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30">
               View Work
             </a>
+            {resumeUrl && (
+              <a 
+                href={resumeUrl} 
+                download="Ayushman_Tripathi_Resume"
+                target="_blank"
+                rel="noreferrer"
+                className="px-8 py-3 rounded-full border border-indigo-500/30 bg-indigo-500/5 text-indigo-400 font-medium hover:bg-indigo-500/10 transition-all flex items-center gap-2"
+              >
+                Download Resume
+              </a>
+            )}
             <a href="/#contact" className="px-8 py-3 rounded-full border border-slate-700 bg-slate-800/50 text-slate-300 font-medium hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2">
               <Mail className="w-5 h-5" />
               Contact Me

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { FolderPlus, FilePlus, Folder as FolderIcon, CheckCircle2, Clock, Trash2, X, Lock, ArrowLeft } from 'lucide-react';
+import { FolderPlus, FilePlus, Folder as FolderIcon, CheckCircle2, Clock, Trash2, X, Lock, ArrowLeft, FileText, Upload, Download } from 'lucide-react';
 
 const Notes = () => {
   const navigate = useNavigate();
@@ -13,13 +13,16 @@ const Notes = () => {
     return [{ id: '1', name: 'Personal Tasks', notes: [] }];
   });
 
-  const [activeFolderId, setActiveFolderId] = useState('1');
+  const [activeFolderId, setActiveFolderId] = useState('1'); // 'resume' will be a special ID
   const [isAddingFolder, setIsAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [newNoteData, setNewNoteData] = useState({ title: '', content: '', status: 'Under Progress' });
   
+  const [resumeUrl, setResumeUrl] = useState(() => localStorage.getItem('portfolio-resume-url') || '');
+  const [resumeName, setResumeName] = useState(() => localStorage.getItem('portfolio-resume-name') || '');
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
@@ -38,6 +41,29 @@ const Notes = () => {
   useEffect(() => {
     localStorage.setItem('portfolio-notes', JSON.stringify(folders));
   }, [folders]);
+
+  useEffect(() => {
+    localStorage.setItem('portfolio-resume-url', resumeUrl);
+    localStorage.setItem('portfolio-resume-name', resumeName);
+  }, [resumeUrl, resumeName]);
+
+  const handleResumeUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const b64 = event.target.result;
+      setResumeUrl(b64);
+      setResumeName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeResume = () => {
+    setResumeUrl('');
+    setResumeName('');
+  };
 
   const addFolder = () => {
     if (!newFolderName.trim()) return;
@@ -181,6 +207,17 @@ const Notes = () => {
               </div>
               
               <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+                {/* Special Resume Folder */}
+                <div 
+                  className={`group flex items-center gap-2.5 p-2.5 rounded-lg cursor-pointer transition-all duration-200 ${activeFolderId === 'resume' ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 border border-transparent hover:bg-slate-800/80 hover:text-slate-200'}`}
+                  onClick={() => setActiveFolderId('resume')}
+                >
+                  <FileText className={`w-4 h-4 shrink-0 ${activeFolderId === 'resume' ? 'text-indigo-400' : ''}`} />
+                  <span className="truncate text-sm font-bold">Resume Mgmt</span>
+                </div>
+
+                <div className="h-px bg-slate-800/50 my-2"></div>
+
                 {isAddingFolder && (
                   <div className="flex items-center gap-2 p-2 bg-slate-900 rounded-lg border border-indigo-500/50">
                     <input 
@@ -219,9 +256,61 @@ const Notes = () => {
               </div>
             </div>
 
-            {/* Main Area - Notes */}
-            <div className="flex-1 flex flex-col bg-slate-950/20 relative">
-              {activeFolder ? (
+            {/* Main Area - Notes or Resume */}
+            <div className="flex-1 flex flex-col bg-slate-950/20 relative overflow-hidden">
+              {activeFolderId === 'resume' ? (
+                <div className="p-8 flex flex-col items-center justify-center h-full text-center">
+                   <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6 text-indigo-400 border border-indigo-500/20">
+                     <FileText className="w-10 h-10" />
+                   </div>
+                   <h3 className="text-2xl font-bold text-slate-100 mb-2">Resume Management</h3>
+                   <p className="text-slate-400 mb-10 max-w-sm">Upload your resume to make it available for download on the portfolio home page.</p>
+
+                   <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+                     {resumeUrl ? (
+                        <div className="space-y-6">
+                           <div className="p-4 bg-slate-950 border border-emerald-500/20 rounded-2xl flex items-center gap-4">
+                             <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500">
+                               <CheckCircle2 className="w-5 h-5" />
+                             </div>
+                             <div className="flex-1 text-left overflow-hidden">
+                               <div className="text-xs font-black text-slate-500 uppercase tracking-widest">Active Resume</div>
+                               <div className="text-slate-200 font-medium truncate">{resumeName}</div>
+                             </div>
+                           </div>
+                           
+                           <div className="flex gap-4">
+                              <a 
+                                href={resumeUrl} 
+                                download={resumeName}
+                                className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 py-3 rounded-xl transition-all font-bold text-sm"
+                              >
+                                <Download className="w-4 h-4" /> Preview
+                              </a>
+                              <button 
+                                onClick={removeResume}
+                                className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all font-bold text-sm"
+                              >
+                                Remove
+                              </button>
+                           </div>
+                        </div>
+                     ) : (
+                        <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-3xl p-10 cursor-pointer transition-all group">
+                          <Upload className="w-12 h-12 text-slate-600 group-hover:text-indigo-400 mb-4 transition-colors" />
+                          <span className="text-slate-400 font-bold group-hover:text-indigo-400">Upload PDF Resume</span>
+                          <span className="text-xs text-slate-600 mt-2 italic">(Max 5MB recommended)</span>
+                          <input 
+                            type="file" 
+                            accept=".pdf,.doc,.docx" 
+                            className="hidden" 
+                            onChange={handleResumeUpload}
+                          />
+                        </label>
+                     )}
+                   </div>
+                </div>
+              ) : activeFolder ? (
                 <>
                   <div className="p-4 md:p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 backdrop-blur-md z-10">
                     <div className="flex items-center gap-3 text-slate-200">

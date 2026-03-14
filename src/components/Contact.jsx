@@ -129,8 +129,8 @@ const Contact = () => {
                 <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mb-8 border border-emerald-500/20">
                   <CheckCircle2 className="w-10 h-10 text-emerald-500" />
                 </div>
-                <h3 className="text-3xl font-black text-white mb-4">Message Received!</h3>
-                <p className="text-slate-400 text-lg">Your message has been securely saved to my internal notes workspace. I'll get back to you soon.</p>
+                <h3 className="text-3xl font-black text-white mb-4">Message sent!</h3>
+                <p className="text-slate-400 text-lg">I will connect with you soon. Thank you for contacting.</p>
               </motion.div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
