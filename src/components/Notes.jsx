@@ -1,43 +1,54 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { FolderPlus, FilePlus, Folder as FolderIcon, CheckCircle2, Clock, Trash2, X, Lock, ArrowLeft, FileText, Upload, Download } from 'lucide-react';
+import { 
+  FolderPlus, FilePlus, Folder as FolderIcon, CheckCircle2, Clock, Trash2, X, Lock, ArrowLeft,
+  FileText, Upload, Download, Mail, User, MessageSquare, LayoutDashboard, ShieldCheck,
+  ChevronRight, Settings, Bell, BellRing, Calendar, Menu, Info, MousePointer2, Plus
+} from 'lucide-react';
 
 const Notes = () => {
   const navigate = useNavigate();
+  
+  // Notes State
   const [folders, setFolders] = useState(() => {
     const saved = localStorage.getItem('portfolio-notes');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return [{ id: '1', name: 'Personal Tasks', notes: [] }];
+    return saved ? JSON.parse(saved) : [{ id: '1', name: 'Personal Tasks', notes: [] }];
   });
-
-  const [activeFolderId, setActiveFolderId] = useState('1'); // 'resume' will be a special ID
+  const [activeFolderId, setActiveFolderId] = useState('1');
   const [isAddingFolder, setIsAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-  
   const [isAddingNote, setIsAddingNote] = useState(false);
-  const [newNoteData, setNewNoteData] = useState({ title: '', content: '', status: 'Under Progress' });
-  
+  const [newNoteData, setNewNoteData] = useState({ title: '', content: '', status: 'Under Progress', time: '' });
+
+  // Mobile Sidebar State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Notification State
+  const [activeAlerts, setActiveAlerts] = useState([]);
+  const [processedAlerts, setProcessedAlerts] = useState(() => {
+    const saved = localStorage.getItem('portfolio-processed-alerts');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof window !== 'undefined' ? Notification.permission : 'default'
+  );
+
+  // Dashboard State (Internalized)
   const [resumeUrl, setResumeUrl] = useState(() => localStorage.getItem('portfolio-resume-url') || '');
   const [resumeName, setResumeName] = useState(() => localStorage.getItem('portfolio-resume-name') || '');
+  const [contacts, setContacts] = useState(() => {
+    const saved = localStorage.getItem('portfolio-contacts');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [activeTab, setActiveTab] = useState('notes');
 
+  // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
 
-  const handlePasswordSubmit = (e) => {
-    e.preventDefault();
-    if (passwordInput === 'notes') {
-      setIsAuthenticated(true);
-      setAuthError('');
-    } else {
-      setAuthError('Incorrect password');
-      setPasswordInput('');
-    }
-  };
-
+  // Persist Data
   useEffect(() => {
     localStorage.setItem('portfolio-notes', JSON.stringify(folders));
   }, [folders]);
@@ -47,67 +58,125 @@ const Notes = () => {
     localStorage.setItem('portfolio-resume-name', resumeName);
   }, [resumeUrl, resumeName]);
 
-  const handleResumeUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  useEffect(() => {
+    localStorage.setItem('portfolio-contacts', JSON.stringify(contacts));
+  }, [contacts]);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const b64 = event.target.result;
-      setResumeUrl(b64);
-      setResumeName(file.name);
+  useEffect(() => {
+    localStorage.setItem('portfolio-processed-alerts', JSON.stringify(processedAlerts));
+  }, [processedAlerts]);
+
+  // System Notification Handler
+  const requestNotificationPermission = () => {
+    if (!("Notification" in window)) {
+      alert("This browser does not support desktop notifications");
+      return;
+    }
+
+    Notification.requestPermission().then((permission) => {
+      setNotificationPermission(permission);
+    });
+  };
+
+  const triggerSystemNotification = (title, body) => {
+    if (Notification.permission === "granted") {
+      new Notification(title, {
+        body: body,
+        icon: "/favicon.ico",
+      });
+    }
+  };
+
+  // Notification Logic
+  useEffect(() => {
+    const checkTasks = () => {
+      const now = new Date();
+      const currentTimestamp = now.getTime();
+      
+      folders.forEach(folder => {
+        folder.notes.forEach(note => {
+          if (note.time && note.status !== 'Completed') {
+            const taskTime = new Date(note.time).getTime();
+            if (taskTime <= currentTimestamp && !processedAlerts.includes(note.id)) {
+              setActiveAlerts(prev => [...prev, { ...note, folderName: folder.name }]);
+              triggerSystemNotification(
+                `Task Started: ${note.title}`,
+                `Workspace Hub reminder for folder: ${folder.name}`
+              );
+              setProcessedAlerts(prev => [...prev, note.id]);
+            }
+          }
+        });
+      });
     };
-    reader.readAsDataURL(file);
+
+    const interval = setInterval(checkTasks, 5000);
+    return () => clearInterval(interval);
+  }, [folders, processedAlerts]);
+
+  // Enhanced Security: SHA-256 Hashing
+  const ADMIN_HASH = "ab5aa97074c454a0632057e704220d9a6678fbf773a0a5806fc09b8173b07309";
+
+  const hashPassword = async (string) => {
+    const utf8 = new TextEncoder().encode(string);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  const removeResume = () => {
-    setResumeUrl('');
-    setResumeName('');
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    const inputHash = await hashPassword(passwordInput);
+    if (inputHash === ADMIN_HASH) {
+      setIsAuthenticated(true);
+      setAuthError('');
+      sessionStorage.setItem('notes-auth', 'true');
+    } else {
+      setAuthError('Incorrect password');
+      setPasswordInput('');
+    }
   };
 
+  useEffect(() => {
+    if (sessionStorage.getItem('notes-auth') === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  // Handlers
   const addFolder = () => {
     if (!newFolderName.trim()) return;
-    const newFolder = {
-      id: Date.now().toString(),
-      name: newFolderName,
-      notes: []
-    };
+    const newFolder = { id: Date.now().toString(), name: newFolderName, notes: [] };
     setFolders([...folders, newFolder]);
     setNewFolderName('');
     setIsAddingFolder(false);
     setActiveFolderId(newFolder.id);
+    setActiveTab('notes');
+    setIsSidebarOpen(false);
   };
 
   const addNote = () => {
     if (!newNoteData.title.trim()) return;
     setFolders(folders.map(folder => {
       if (folder.id === activeFolderId) {
-        return {
-          ...folder,
-          notes: [...folder.notes, { ...newNoteData, id: Date.now().toString() }]
-        };
+        return { ...folder, notes: [{ ...newNoteData, id: Date.now().toString() }, ...folder.notes] };
       }
       return folder;
     }));
-    setNewNoteData({ title: '', content: '', status: 'Under Progress' });
+    setNewNoteData({ title: '', content: '', status: 'Under Progress', time: '' });
     setIsAddingNote(false);
   };
 
   const deleteFolder = (id) => {
     const updatedFolders = folders.filter(f => f.id !== id);
     setFolders(updatedFolders);
-    if (activeFolderId === id) {
-      setActiveFolderId(updatedFolders.length > 0 ? updatedFolders[0].id : null);
-    }
+    if (activeFolderId === id && updatedFolders.length > 0) setActiveFolderId(updatedFolders[0].id);
   };
 
   const deleteNote = (folderId, noteId) => {
     setFolders(folders.map(folder => {
       if (folder.id === folderId) {
-        return {
-          ...folder,
-          notes: folder.notes.filter(n => n.id !== noteId)
-        };
+        return { ...folder, notes: folder.notes.filter(n => n.id !== noteId) };
       }
       return folder;
     }));
@@ -119,9 +188,7 @@ const Notes = () => {
         return {
           ...folder,
           notes: folder.notes.map(n => {
-            if (n.id === noteId) {
-              return { ...n, status: n.status === 'Completed' ? 'Under Progress' : 'Completed' };
-            }
+            if (n.id === noteId) return { ...n, status: n.status === 'Completed' ? 'Under Progress' : 'Completed' };
             return n;
           })
         };
@@ -130,40 +197,55 @@ const Notes = () => {
     }));
   };
 
+  const dismissAlert = (noteId) => {
+    setActiveAlerts(prev => prev.filter(a => a.id !== noteId));
+  };
+
+  const formatAMPM = (dateString) => {
+    if (!dateString) return "No time set";
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit', 
+      hour12: true,
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const handleResumeUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setResumeUrl(event.target.result);
+      setResumeName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeResume = () => {
+    setResumeUrl('');
+    setResumeName('');
+  };
+
+  const deleteContact = (id) => {
+    setContacts(contacts.filter(c => c.id !== id));
+  };
+
   const activeFolder = folders.find(f => f.id === activeFolderId);
 
   if (!isAuthenticated) {
     return (
-      <section id="notes" className="py-20 px-4 sm:px-6 lg:px-8 border-t border-slate-900 bg-slate-950 min-h-[600px] flex items-center justify-center">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="bg-slate-900/50 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-md w-full text-center"
-        >
-          <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Lock className="w-8 h-8 text-indigo-400" />
-          </div>
-          <h2 className="text-2xl font-bold mb-2 text-slate-200">Protected Workspace</h2>
-          <p className="text-slate-400 mb-8 text-sm">Please enter the password to access your notes.</p>
-          
+      <section className="min-h-screen flex items-center justify-center bg-slate-950 px-4 pt-20">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-slate-900/50 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-800 shadow-2xl max-w-sm sm:max-w-md w-full text-center backdrop-blur-xl">
+          <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-indigo-500/20"><ShieldCheck className="w-8 h-8 text-indigo-400" /></div>
+          <h2 className="text-xl sm:text-2xl font-black mb-2 text-white uppercase tracking-tighter">Admin Access</h2>
+          <p className="text-slate-400 mb-8 text-xs sm:text-sm font-medium leading-relaxed px-2">Secure access for Ayushman Portfolio Workspace.</p>
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <div>
-              <input
-                type="password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Enter password..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors text-center font-medium tracking-widest placeholder:tracking-normal"
-                autoFocus
-              />
-              {authError && <p className="text-red-400 text-sm mt-3 font-medium">{authError}</p>}
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-2 py-3 px-4 rounded-lg transition-colors shadow-lg shadow-indigo-600/20"
-            >
-              Unlock Notes
-            </button>
+            <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="Access Key" className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-slate-200 focus:outline-none focus:border-indigo-500 transition-all text-center font-bold tracking-[0.2em] sm:tracking-[0.3em]" autoFocus />
+            {authError && <p className="text-red-400 text-xs sm:text-sm font-bold">{authError}</p>}
+            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase text-xs sm:text-sm tracking-widest py-4 rounded-2xl transition-all shadow-xl">Authorize Access</button>
           </form>
         </motion.div>
       </section>
@@ -171,283 +253,203 @@ const Notes = () => {
   }
 
   return (
-    <section id="notes" className="py-20 px-4 sm:px-6 lg:px-8 border-t border-slate-900 bg-slate-950 relative min-h-[600px]">
-      <div className="max-w-6xl mx-auto">
-        <motion.div
-           initial={{ opacity: 0, y: 20 }}
-           whileInView={{ opacity: 1, y: 0 }}
-           viewport={{ once: true, margin: "-100px" }}
-           transition={{ duration: 0.5 }}
-        >
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <h2 className="text-3xl md:text-4xl font-bold flex items-center gap-4">
-              <span className="text-indigo-500 font-mono text-2xl">06.</span> Workspace Notes
-              <div className="hidden md:block h-px bg-slate-800 w-32 mt-2"></div>
-            </h2>
-            <button 
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-900/50 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 transition-all group"
-            >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-              Back to Portfolio
-            </button>
-          </div>
+    <section className="min-h-screen bg-slate-950 pt-24 sm:pt-28 pb-12 px-2 sm:px-6 lg:px-8">
+      {/* Floating Action Button for Mobile */}
+      <button 
+        onClick={() => setIsAddingNote(true)}
+        className="md:hidden fixed bottom-8 right-6 w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-2xl shadow-indigo-600/40 z-[45] active:scale-95 transition-transform"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
 
-          <div className="flex flex-col md:flex-row gap-0 h-[600px] bg-slate-900/40 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
-            {/* Sidebar - Folders */}
-            <div className="w-full md:w-64 bg-slate-950/80 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col shrink-0">
-              <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-                <h3 className="font-semibold text-slate-300">Folders</h3>
-                <button 
-                  onClick={() => setIsAddingFolder(true)}
-                  className="p-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-md text-slate-400 hover:text-indigo-400 transition-colors"
-                >
-                  <FolderPlus className="w-4 h-4" />
-                </button>
+      {/* Internal Notification Toasts */}
+      <div className="fixed top-24 right-4 z-[100] flex flex-col gap-4 pointer-events-none w-full max-w-[400px] px-4 sm:px-0">
+        <AnimatePresence>
+          {activeAlerts.map(alert => (
+            <motion.div key={alert.id} initial={{ opacity: 0, x: 50, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 20, scale: 0.9 }} className="pointer-events-auto bg-slate-900/95 border-l-4 border-l-indigo-500 border border-slate-800 p-4 sm:p-5 rounded-2xl shadow-2xl backdrop-blur-xl flex gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center shrink-0"><BellRing className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400 animate-bounce" /></div>
+              <div className="flex-1">
+                <p className="text-[9px] sm:text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Time to Start</p>
+                <h4 className="text-xs sm:text-sm font-bold text-white mb-1">{alert.title}</h4>
+                <p className="text-[10px] sm:text-xs text-slate-400 line-clamp-1 italic mb-2">In {alert.folderName}</p>
+                <button onClick={() => dismissAlert(alert.id)} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-[10px] font-black uppercase text-slate-300 rounded-lg transition-all">Dismiss</button>
               </div>
-              
-              <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-                {/* Special Resume Folder */}
-                <div 
-                  className={`group flex items-center gap-2.5 p-2.5 rounded-lg cursor-pointer transition-all duration-200 ${activeFolderId === 'resume' ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 border border-transparent hover:bg-slate-800/80 hover:text-slate-200'}`}
-                  onClick={() => setActiveFolderId('resume')}
-                >
-                  <FileText className={`w-4 h-4 shrink-0 ${activeFolderId === 'resume' ? 'text-indigo-400' : ''}`} />
-                  <span className="truncate text-sm font-bold">Resume Mgmt</span>
+              <button onClick={() => dismissAlert(alert.id)} className="text-slate-500 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      <div className="max-w-7xl mx-auto flex flex-col h-[calc(100vh-140px)] sm:h-[calc(100vh-160px)] min-h-[500px] sm:min-h-[700px]">
+        {notificationPermission === 'default' && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4 sm:mb-6 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 mx-2 sm:mx-0">
+            <div className="flex items-center gap-3"><Info className="w-5 h-5 text-indigo-400 shrink-0" /><p className="text-[10px] sm:text-xs font-bold text-slate-300 text-center sm:text-left">Enable <span className="text-white">Push Notifications</span> for background alerts.</p></div>
+            <button onClick={requestNotificationPermission} className="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg">Confirm</button>
+          </motion.div>
+        )}
+
+        {/* Top Header Section */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 mb-6 sm:mb-8 px-2 sm:px-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="md:hidden p-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-300 active:scale-95 transition-all"><Menu className="w-6 h-6" /></button>
+            <div>
+              <div className="flex items-center gap-3 sm:gap-4 mb-1">
+                <div className="hidden sm:flex w-12 h-12 bg-indigo-500/10 rounded-2xl items-center justify-center border border-indigo-500/20"><LayoutDashboard className="w-6 h-6 text-indigo-400" /></div>
+                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white uppercase tracking-tighter">Workspace <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-violet-400 to-indigo-400">Hub</span></h1>
+              </div>
+              <p className="text-slate-500 font-bold uppercase tracking-[0.2em] text-[8px] sm:text-[10px]">Studio Administration Portal</p>
+            </div>
+          </div>
+          <button onClick={() => navigate('/')} className="hidden sm:flex items-center gap-3 px-6 py-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-300 font-black uppercase text-xs tracking-widest shadow-xl"><ArrowLeft className="w-4 h-4" /> Exit Studio</button>
+        </div>
+
+        {/* Unified Main Card */}
+        <div className="flex-1 bg-slate-900/30 rounded-[2rem] sm:rounded-[3rem] border border-slate-800/50 backdrop-blur-md overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
+          
+          <AnimatePresence>
+            {isSidebarOpen && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 md:hidden" />
+            )}
+          </AnimatePresence>
+
+          {/* Unified Sidebar Layout */}
+          <div className={`fixed md:relative inset-y-0 left-0 w-[280px] sm:w-72 bg-slate-950/98 md:bg-slate-950/40 border-r border-slate-800 transition-transform duration-300 z-50 md:z-20 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+            <div className="p-6 flex flex-col gap-8 h-full overflow-y-auto custom-scrollbar">
+              <div className="flex md:hidden justify-between items-center px-2">
+                <span className="text-xl font-black text-white uppercase tracking-tighter">Workspace Menu</span>
+                <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-slate-500 active:scale-95"><X className="w-7 h-7" /></button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Personal Folders</span>
+                  <button onClick={() => setIsAddingFolder(true)} className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-400 hover:scale-110 active:scale-90 transition-all"><FolderPlus className="w-4 h-4" /></button>
                 </div>
-
-                <div className="h-px bg-slate-800/50 my-2"></div>
-
-                {isAddingFolder && (
-                  <div className="flex items-center gap-2 p-2 bg-slate-900 rounded-lg border border-indigo-500/50">
-                    <input 
-                      autoFocus
-                      type="text"
-                      className="w-full bg-transparent border-none text-sm text-slate-200 focus:outline-none placeholder:text-slate-600"
-                      placeholder="Folder name..."
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addFolder()}
-                    />
-                    <button onClick={() => setIsAddingFolder(false)} className="text-slate-500 hover:text-slate-300 p-1">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-                
-                {folders.map(folder => (
-                  <div 
-                    key={folder.id}
-                    className={`group flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-all duration-200 ${activeFolderId === folder.id ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 border border-transparent hover:bg-slate-800/80 hover:text-slate-200'}`}
-                    onClick={() => setActiveFolderId(folder.id)}
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <FolderIcon className={`w-4 h-4 shrink-0 ${activeFolderId === folder.id ? 'fill-indigo-500/20' : ''}`} />
-                      <span className="truncate text-sm font-medium">{folder.name}</span>
+                <div className="space-y-1.5">
+                  {isAddingFolder && (
+                    <div className="flex items-center gap-2 p-3 bg-slate-900 rounded-2xl border border-indigo-500/50"><input autoFocus type="text" className="w-full bg-transparent border-none text-sm text-slate-200 focus:outline-none font-bold" placeholder="Folder Name" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addFolder()}/><button onClick={() => setIsAddingFolder(false)} className="text-slate-500"><X className="w-4 h-4" /></button></div>
+                  )}
+                  {folders.map(folder => (
+                    <div key={folder.id} onClick={() => { setActiveFolderId(folder.id); setActiveTab('notes'); setIsSidebarOpen(false); }} className={`group flex items-center justify-between p-3.5 rounded-2xl cursor-pointer transition-all ${activeTab === 'notes' && activeFolderId === folder.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800/50'}`}>
+                      <div className="flex items-center gap-3 truncate"><FolderIcon className={`w-4 h-4 shrink-0 ${(activeTab === 'notes' && activeFolderId === folder.id) ? 'fill-white/20' : 'fill-slate-500/20'}`} /><span className="truncate text-sm font-bold">{folder.name}</span></div>
+                      <button onClick={(e) => { e.stopPropagation(); deleteFolder(folder.id); }} className={`p-1 transition-all ${activeTab === 'notes' && activeFolderId === folder.id ? 'opacity-40 hover:opacity-100' : 'opacity-0 group-hover:opacity-100 hover:text-red-400'}`}><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); deleteFolder(folder.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/10 rounded hover:text-red-400 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-2">Management Portal</span>
+                <div className="space-y-1.5 text-slate-400">
+                  <button onClick={() => { setActiveTab('resume'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl font-bold transition-all text-sm ${activeTab === 'resume' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800/50'}`}><FileText className="w-4 h-4" /> Resume Portal</button>
+                  <button onClick={() => { setActiveTab('contacts'); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between p-3.5 rounded-2xl font-bold transition-all text-sm ${activeTab === 'contacts' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800/50'}`}><div className="flex items-center gap-3.5"><Mail className="w-4 h-4" /> Inquiries</div>{contacts.length > 0 && <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'contacts' ? 'bg-white/20 text-white' : 'bg-indigo-500/10 text-indigo-400'}`}>{contacts.length}</span>}</button>
+                </div>
               </div>
             </div>
+            <div className="p-6 border-t border-slate-800/50 bg-slate-950/20 mt-auto"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500"><User className="w-4 h-4" /></div><div className="flex-1 overflow-hidden"><p className="text-[10px] font-black text-white uppercase truncate">Ayushman Tripathi</p><p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Admin Role</p></div><Settings className="w-4 h-4 text-slate-700 pointer-hover" /></div></div>
+          </div>
 
-            {/* Main Area - Notes or Resume */}
-            <div className="flex-1 flex flex-col bg-slate-950/20 relative overflow-hidden">
-              {activeFolderId === 'resume' ? (
-                <div className="p-8 flex flex-col items-center justify-center h-full text-center">
-                   <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6 text-indigo-400 border border-indigo-500/20">
-                     <FileText className="w-10 h-10" />
-                   </div>
-                   <h3 className="text-2xl font-bold text-slate-100 mb-2">Resume Management</h3>
-                   <p className="text-slate-400 mb-10 max-w-sm">Upload your resume to make it available for download on the portfolio home page.</p>
+          <div className="flex-1 flex flex-col bg-slate-950/10 relative overflow-hidden h-full">
+            <AnimatePresence mode="wait">
+              {activeTab === 'notes' ? (
+                <motion.div key={activeFolderId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col h-full">
+                  {activeFolder ? (
+                    <>
+                      <div className="p-4 sm:p-8 border-b border-slate-800/50 flex flex-col xs:flex-row justify-between items-start xs:items-center gap-4 bg-slate-950/30 backdrop-blur-xl">
+                        <div><h3 className="text-lg sm:text-2xl font-black text-white flex items-center gap-2 sm:gap-3 uppercase tracking-tight">{activeFolder.name}<span className="text-[9px] sm:text-[10px] font-black text-slate-600 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">{activeFolder.notes.length} Tasks</span></h3></div>
+                        <button onClick={() => setIsAddingNote(true)} className="hidden sm:flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl transition-all text-xs font-black uppercase tracking-widest shadow-xl"><FilePlus className="w-4 h-4" /> Create task</button>
+                      </div>
 
-                   <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
-                     {resumeUrl ? (
-                        <div className="space-y-6">
-                           <div className="p-4 bg-slate-950 border border-emerald-500/20 rounded-2xl flex items-center gap-4">
-                             <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500">
-                               <CheckCircle2 className="w-5 h-5" />
-                             </div>
-                             <div className="flex-1 text-left overflow-hidden">
-                               <div className="text-xs font-black text-slate-500 uppercase tracking-widest">Active Resume</div>
-                               <div className="text-slate-200 font-medium truncate">{resumeName}</div>
-                             </div>
-                           </div>
-                           
-                           <div className="flex gap-4">
-                              <a 
-                                href={resumeUrl} 
-                                download={resumeName}
-                                className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 py-3 rounded-xl transition-all font-bold text-sm"
-                              >
-                                <Download className="w-4 h-4" /> Preview
-                              </a>
-                              <button 
-                                onClick={removeResume}
-                                className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all font-bold text-sm"
-                              >
-                                Remove
-                              </button>
-                           </div>
-                        </div>
-                     ) : (
-                        <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-3xl p-10 cursor-pointer transition-all group">
-                          <Upload className="w-12 h-12 text-slate-600 group-hover:text-indigo-400 mb-4 transition-colors" />
-                          <span className="text-slate-400 font-bold group-hover:text-indigo-400">Upload PDF Resume</span>
-                          <span className="text-xs text-slate-600 mt-2 italic">(Max 5MB recommended)</span>
-                          <input 
-                            type="file" 
-                            accept=".pdf,.doc,.docx" 
-                            className="hidden" 
-                            onChange={handleResumeUpload}
-                          />
-                        </label>
-                     )}
-                   </div>
-                </div>
-              ) : activeFolder ? (
-                <>
-                  <div className="p-4 md:p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 backdrop-blur-md z-10">
-                    <div className="flex items-center gap-3 text-slate-200">
-                      <FolderIcon className="w-5 h-5 text-indigo-400 fill-indigo-400/20" />
-                      <h3 className="font-bold text-lg">{activeFolder.name}</h3>
-                      <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">{activeFolder.notes.length} notes</span>
-                    </div>
-                    <button
-                      onClick={() => setIsAddingNote(true)}
-                      className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold shadow-lg shadow-indigo-600/20"
-                    >
-                      <FilePlus className="w-4 h-4" />
-                      Add Note
-                    </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 scroll-smooth">
-                    {isAddingNote && (
-                      <motion.div 
-                        initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        className="bg-slate-900 border border-indigo-500/30 rounded-xl p-5 mb-6 shadow-2xl"
-                      >
-                        <input
-                          autoFocus
-                          type="text"
-                          placeholder="Task or Note Title"
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 mb-4 text-slate-200 focus:outline-none focus:border-indigo-500 font-semibold"
-                          value={newNoteData.title}
-                          onChange={(e) => setNewNoteData({...newNoteData, title: e.target.value})}
-                        />
-                        <textarea
-                          placeholder="Note descriptions, details, or checklists..."
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 mb-4 text-slate-300 focus:outline-none focus:border-indigo-500 min-h-[120px] resize-y text-sm leading-relaxed"
-                          value={newNoteData.content}
-                          onChange={(e) => setNewNoteData({...newNoteData, content: e.target.value})}
-                        />
-                        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-slate-400">Status:</span>
-                            <select 
-                              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-300 focus:outline-none focus:border-indigo-500"
-                              value={newNoteData.status}
-                              onChange={(e) => setNewNoteData({...newNoteData, status: e.target.value})}
-                            >
-                              <option value="Under Progress">Under Progress</option>
-                              <option value="Completed">Completed</option>
-                            </select>
-                          </div>
-                          
-                          <div className="flex gap-3 w-full sm:w-auto">
-                            <button 
-                              onClick={() => setIsAddingNote(false)}
-                              className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors flex-1 sm:flex-none"
-                            >
-                              Cancel
-                            </button>
-                            <button 
-                              onClick={addNote}
-                              className="px-6 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors flex-1 sm:flex-none shadow-lg shadow-indigo-600/20"
-                            >
-                              Save Task
-                            </button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <AnimatePresence>
-                        {activeFolder.notes.map(note => (
-                          <motion.div
-                            key={note.id}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            layout
-                            className={`border rounded-xl p-5 group transition-all duration-300 flex flex-col shadow-lg
-                              ${note.status === 'Completed' 
-                                ? 'bg-slate-900/50 border-emerald-500/20 hover:border-emerald-500/40' 
-                                : 'bg-slate-900/90 border-slate-700 hover:border-indigo-500/50'
-                              }`}
-                          >
-                            <div className="flex justify-between items-start mb-3 gap-4">
-                              <h4 className={`font-semibold text-lg ${note.status === 'Completed' ? 'text-slate-400 line-through decoration-slate-600' : 'text-slate-100'}`}>
-                                {note.title}
-                              </h4>
-                              <button 
-                                onClick={() => deleteNote(activeFolder.id, note.id)}
-                                className="text-slate-500 bg-slate-800/50 hover:bg-red-500/10 p-1.5 rounded-md hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                      <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar">
+                        {isAddingNote && (
+                          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-900/98 border border-indigo-500/40 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 mb-8 shadow-2xl backdrop-blur-3xl sticky top-0 z-10 mx-1">
+                            <input autoFocus type="text" placeholder="Title" className="w-full bg-slate-950 border border-slate-800 rounded-xl sm:rounded-2xl px-5 sm:px-6 py-3.5 sm:py-4 mb-4 sm:mb-6 text-slate-100 focus:outline-none focus:border-indigo-500 font-bold text-base sm:text-lg" value={newNoteData.title} onChange={(e) => setNewNoteData({...newNoteData, title: e.target.value})}/>
+                            <textarea placeholder="Task details..." className="w-full bg-slate-950 border border-slate-800 rounded-xl sm:rounded-2xl px-5 sm:px-6 py-4 sm:py-5 mb-6 sm:mb-8 text-slate-300 focus:outline-none focus:border-indigo-500 min-h-[100px] sm:min-h-[120px] resize-none text-sm leading-relaxed" value={newNoteData.content} onChange={(e) => setNewNoteData({...newNoteData, content: e.target.value})}/>
                             
-                            <p className={`text-sm mb-6 whitespace-pre-wrap flex-1 leading-relaxed ${note.status === 'Completed' ? 'text-slate-500' : 'text-slate-300'}`}>
-                              {note.content}
-                            </p>
-                            
-                            <div className="flex items-center justify-between pt-4 border-t border-slate-800/60 mt-auto">
-                              <button
-                                onClick={() => toggleNoteStatus(activeFolder.id, note.id)}
-                                className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full transition-all ${
-                                  note.status === 'Completed' 
-                                    ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/20 hover:ring-emerald-500/40' 
-                                    : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 ring-1 ring-amber-500/20 hover:ring-amber-500/40'
-                                }`}
-                              >
-                                {note.status === 'Completed' ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                                {note.status}
-                              </button>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 mb-6 sm:mb-8">
+                              <div className="space-y-3">
+                                <label className="text-[10px] sm:text-[11px] font-black text-slate-500 uppercase tracking-wider ml-1 flex items-center gap-2"><Calendar className="w-4 h-4 text-indigo-400" /> Start Time</label>
+                                <div className="space-y-2">
+                                  <input type="datetime-local" className="w-full bg-slate-950 border-2 border-slate-800 rounded-xl sm:rounded-[1.5rem] px-4 py-3 sm:px-6 sm:py-4 text-sm font-black text-white focus:outline-none focus:border-indigo-500 appearance-none cursor-pointer" value={newNoteData.time} onChange={(e) => setNewNoteData({...newNoteData, time: e.target.value})}/>
+                                  <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/5 rounded-lg border border-indigo-500/10"><Clock className="w-3 h-3 text-indigo-400" /><span className="text-[9px] font-black text-indigo-300 uppercase truncate">{newNoteData.time ? formatAMPM(newNoteData.time) : "Not Scheduled"}</span></div>
+                                </div>
+                              </div>
+                              <div className="space-y-3">
+                                <label className="text-[10px] sm:text-[11px] font-black text-slate-500 uppercase tracking-wider ml-1 flex items-center gap-2"><Settings className="w-4 h-4 text-amber-400" /> Goal Priority</label>
+                                <select className="w-full bg-slate-950 border-2 border-slate-800 rounded-xl sm:rounded-[1.5rem] px-4 py-3 sm:px-6 sm:py-4 text-xs font-black uppercase text-indigo-400 appearance-none focus:outline-none focus:border-indigo-500" value={newNoteData.status} onChange={(e) => setNewNoteData({...newNoteData, status: e.target.value})}><option value="Under Progress">Under Progress</option><option value="Completed">Completed</option></select>
+                              </div>
                             </div>
+                            <div className="flex gap-3 sm:gap-4"><button onClick={() => setIsAddingNote(false)} className="flex-1 px-4 sm:px-8 py-4 text-xs font-black uppercase text-slate-500 hover:text-slate-300">Cancel</button><button onClick={addNote} className="flex-[2] px-6 sm:px-10 py-4 text-xs font-black uppercase bg-indigo-600 text-white rounded-xl sm:rounded-[1.2rem] shadow-xl hover:bg-indigo-500 active:scale-95 transition-all">Add Task</button></div>
                           </motion.div>
-                        ))}
-                      </AnimatePresence>
-                      
-                      {!isAddingNote && activeFolder.notes.length === 0 && (
-                        <div className="col-span-full py-20 text-center flex flex-col items-center justify-center text-slate-500">
-                          <div className="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center mb-4">
-                            <FolderIcon className="w-8 h-8 opacity-40 text-indigo-400" />
-                          </div>
-                          <p className="font-medium text-slate-400">No notes in this folder yet</p>
-                          <p className="text-sm mt-2 opacity-80">Click the "Add Note" button to start populating this workspace.</p>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 pb-20 sm:pb-0">
+                          {activeFolder.notes.map(note => (
+                            <motion.div layout key={note.id} className={`p-5 sm:p-6 rounded-[1.8rem] sm:rounded-[2.5rem] border-2 transition-all group flex flex-col ${note.status === 'Completed' ? 'bg-slate-900/30 border-emerald-500/5' : 'bg-slate-900/60 border-slate-800/80 hover:border-indigo-500/30 shadow-xl'}`}>
+                              <div className="flex justify-between items-start mb-3 sm:mb-4 gap-4">
+                                <h4 className={`font-black text-base sm:text-lg tracking-tight leading-tight ${note.status === 'Completed' ? 'text-slate-600 line-through' : 'text-slate-100'}`}>{note.title}</h4>
+                                <button onClick={() => deleteNote(activeFolder.id, note.id)} className="text-slate-700 hover:text-red-400 xs:opacity-0 xs:group-hover:opacity-100 transition-all p-1"><Trash2 className="w-4 h-4" /></button>
+                              </div>
+                              <p className={`text-xs sm:text-sm mb-6 leading-relaxed flex-1 ${note.status === 'Completed' ? 'text-slate-600' : 'text-slate-400'}`}>{note.content}</p>
+                              <div className="space-y-3 sm:space-y-4 pt-4 border-t border-slate-800/40">
+                                {note.time && (
+                                  <div className={`flex items-center gap-2 text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${new Date(note.time) < new Date() && note.status !== 'Completed' ? 'text-red-500' : 'text-slate-500'}`}>
+                                    <Bell className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> {formatAMPM(note.time)}
+                                  </div>
+                                )}
+                                <button onClick={() => toggleNoteStatus(activeFolder.id, note.id)} className={`w-full flex items-center justify-center gap-2 text-[9px] font-black uppercase py-2.5 sm:py-3 rounded-xl sm:rounded-[1rem] transition-all border ${note.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-indigo-500/5 text-indigo-400 border-indigo-500/20'}`}>{note.status === 'Completed' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />} {note.status}</button>
+                              </div>
+                            </motion.div>
+                          ))}
+                          {activeFolder.notes.length === 0 && !isAddingNote && (
+                            <div className="col-span-full h-48 sm:h-64 border-2 border-dashed border-slate-800 rounded-[2rem] sm:rounded-[3rem] flex flex-col items-center justify-center text-slate-700 text-center p-6 opacity-40"><FilePlus className="w-8 h-8 sm:w-12 sm:h-12 mb-3" /><p className="font-black uppercase tracking-widest text-[10px]">Folder is empty</p></div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-800 h-full"><LayoutDashboard className="w-16 h-16 mb-4 opacity-10" /><p className="font-black uppercase tracking-[0.2em] text-[10px]">Select a folder</p></div>
+                  )}
+                </motion.div>
+              ) : activeTab === 'resume' ? (
+                <motion.div key="resume" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 sm:p-16 h-full flex flex-col justify-center items-center text-center">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 bg-indigo-500/10 rounded-[2rem] flex items-center justify-center mb-6"><FileText className="w-10 h-10 sm:w-12 sm:h-12 text-indigo-400" /></div>
+                  <h2 className="text-2xl sm:text-4xl font-black text-white mb-2 uppercase tracking-tighter">Resume <span className="text-indigo-500">Portal</span></h2>
+                  <p className="text-slate-400 text-xs sm:text-base mb-10 max-w-xs sm:max-w-sm mx-auto font-medium leading-relaxed">Update your public resume asset instantly.</p>
+                  <div className="max-w-md mx-auto w-full">
+                    {resumeUrl ? (
+                      <div className="space-y-4 sm:space-y-6">
+                        <div className="p-5 sm:p-6 bg-slate-900 border border-slate-800 rounded-2xl flex items-center gap-4 text-left"><div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center shrink-0"><CheckCircle2 className="w-6 h-6 text-emerald-500" /></div><div><div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Status: Active</div><div className="text-slate-100 font-bold text-sm truncate max-w-[150px] sm:max-w-[250px]">{resumeName}</div></div></div>
+                        <div className="grid grid-cols-2 gap-3 sm:gap-4"><a href={resumeUrl} download={resumeName} className="flex items-center justify-center gap-2 bg-slate-800 py-3.5 sm:py-4 rounded-xl text-xs font-black uppercase text-slate-200">Preview</a><button onClick={removeResume} className="bg-red-500/10 text-red-500 py-3.5 sm:py-4 rounded-xl text-xs font-black uppercase border border-red-500/20">Delete</button></div>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center border-3 sm:border-4 border-dashed border-slate-800 hover:border-indigo-500/40 rounded-[2rem] sm:rounded-[3rem] p-10 sm:p-16 cursor-pointer bg-slate-950/40 active:scale-98 transition-all"><Upload className="w-12 h-12 text-slate-800 mb-4 transition-transform group-active:-translate-y-1" /><span className="text-slate-600 font-black uppercase tracking-[0.2em] text-[9px] sm:text-[10px]">Select Resume File</span><input type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleResumeUpload}/></label>
+                    )}
                   </div>
-                </>
+                </motion.div>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
-                  <FolderIcon className="w-16 h-16 mb-4 opacity-20" />
-                  <p>Select or create a folder to view notes</p>
-                </div>
+                <motion.div key="contacts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 sm:p-8 h-full flex flex-col overflow-y-auto custom-scrollbar">
+                  <h2 className="text-xl sm:text-3xl font-black text-white uppercase tracking-tighter mb-6 sm:mb-8 text-left">Inquiry <span className="text-indigo-500">Log</span></h2>
+                  <div className="space-y-4 sm:space-y-6 pb-20 sm:pb-0">
+                    {contacts.length === 0 ? (
+                      <div className="bg-slate-900/30 border-2 border-dashed border-slate-800 rounded-2xl p-12 text-center flex flex-col justify-center items-center opacity-40"><Mail className="w-12 h-12 text-slate-800 mb-4" /><p className="text-slate-600 font-black uppercase tracking-widest text-[10px]">Log is empty</p></div>
+                    ) : (
+                      contacts.map(contact => (
+                        <div key={contact.id} className="bg-slate-900/50 border border-slate-800 rounded-[1.5rem] sm:rounded-2xl p-5 sm:p-8 hover:border-indigo-500/30 shadow-xl transition-all">
+                          <div className="flex flex-col sm:flex-row justify-between gap-4 mb-4 sm:mb-6">
+                            <div className="flex flex-col gap-1.5"><div className="flex items-center gap-2"><User className="w-4 h-4 text-indigo-400" /><span className="text-sm font-black text-slate-100">{contact.name}</span></div><div className="flex items-center gap-2"><Mail className="w-4 h-4 text-violet-400" /><span className="text-[10px] sm:text-xs font-bold text-slate-400 truncate max-w-[200px]">{contact.email}</span></div></div>
+                            <div className="flex items-center justify-between sm:justify-end gap-4"><span className="text-[9px] sm:text-[10px] text-slate-600 font-mono italic">{contact.timestamp}</span><button onClick={() => deleteContact(contact.id)} className="p-2 text-red-500/40 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button></div>
+                          </div>
+                          <div className="bg-slate-950 p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-slate-800 inset-shadow-inner text-left"><p className="text-slate-300 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">{contact.message}</p></div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
               )}
-            </div>
+            </AnimatePresence>
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );

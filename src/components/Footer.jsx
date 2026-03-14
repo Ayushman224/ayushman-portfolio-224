@@ -25,8 +25,8 @@ const Footer = () => {
           </a>
         </div>
         
-        <div className="text-slate-500 text-xs font-mono">
-          &copy; {new Date().getFullYear()} &bull; Built with React & Vite
+        <div className="text-slate-500 text-xs font-mono flex items-center gap-1.5">
+          &copy; {new Date().getFullYear()} &bull; Built with <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500 animate-pulse" />
         </div>
       </div>
     </footer>

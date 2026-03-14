@@ -12,32 +12,19 @@ const Contact = () => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.message) return;
 
-    const savedNotes = localStorage.getItem('portfolio-notes');
-    let folders = savedNotes ? JSON.parse(savedNotes) : [];
-    let contactsFolder = folders.find(f => f.name.toLowerCase() === 'contacts');
+    const savedContacts = localStorage.getItem('portfolio-contacts');
+    let contacts = savedContacts ? JSON.parse(savedContacts) : [];
     
-    if (!contactsFolder) {
-      contactsFolder = { id: 'contacts-' + Date.now().toString(), name: 'Contacts', notes: [] };
-      folders.push(contactsFolder);
-    }
-
-    const newNote = {
+    const newContact = {
       id: Date.now().toString(),
-      title: `Message from ${formData.name}`,
-      metadata: `Email: ${formData.email}`,
-      content: formData.message,
-      status: 'Under Progress',
+      name: formData.name,
+      email: formData.email,
+      message: formData.message,
       timestamp: new Date().toLocaleString()
     };
 
-    folders = folders.map(folder => {
-      if (folder.id === contactsFolder.id) {
-        return { ...folder, notes: [newNote, ...folder.notes] };
-      }
-      return folder;
-    });
-
-    localStorage.setItem('portfolio-notes', JSON.stringify(folders));
+    contacts = [newContact, ...contacts];
+    localStorage.setItem('portfolio-contacts', JSON.stringify(contacts));
     setFormData({ name: '', email: '', message: '' });
     setIsSubmitted(true);
     setTimeout(() => setIsSubmitted(false), 5000);
