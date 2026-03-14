@@ -23,6 +23,18 @@ const Notes = () => {
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [newNoteData, setNewNoteData] = useState({ title: '', content: '', status: 'Under Progress', time: '' });
 
+  // Digital Notebook State
+  const [noteSections, setNoteSections] = useState(() => {
+    const saved = localStorage.getItem('portfolio-notebook');
+    return saved ? JSON.parse(saved) : [{ id: '1', name: 'General Notes', notes: [] }];
+  });
+  const [activeSectionId, setActiveSectionId] = useState('1');
+  const [isAddingSection, setIsAddingSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [isAddingPlainNote, setIsAddingPlainNote] = useState(false);
+  const [newPlainNoteData, setNewPlainNoteData] = useState({ title: '', content: '' });
+  const [editingPlainNoteId, setEditingPlainNoteId] = useState(null);
+
   // Mobile Sidebar State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -160,7 +172,7 @@ const Notes = () => {
     const saved = localStorage.getItem('portfolio-contacts');
     return saved ? JSON.parse(saved) : [];
   });
-  const [activeTab, setActiveTab] = useState('notes');
+  const [activeTab, setActiveTab] = useState('tasks');
 
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -184,6 +196,10 @@ const Notes = () => {
   useEffect(() => {
     localStorage.setItem('portfolio-processed-alerts', JSON.stringify(processedAlerts));
   }, [processedAlerts]);
+
+  useEffect(() => {
+    localStorage.setItem('portfolio-notebook', JSON.stringify(noteSections));
+  }, [noteSections]);
 
   // System Notification Handler
   const requestNotificationPermission = () => {
@@ -429,6 +445,58 @@ const Notes = () => {
   };
 
   const activeFolder = folders.find(f => f.id === activeFolderId);
+  const activeSection = noteSections.find(s => s.id === activeSectionId);
+
+  // Notebook Handlers
+  const addSection = () => {
+    if (!newSectionName.trim()) return;
+    const newSection = { id: Date.now().toString(), name: newSectionName, notes: [] };
+    setNoteSections([...noteSections, newSection]);
+    setNewSectionName('');
+    setIsAddingSection(false);
+    setActiveSectionId(newSection.id);
+    setActiveTab('notebook');
+    setIsSidebarOpen(false);
+  };
+
+  const deleteSection = (id) => {
+    setNoteSections(noteSections.filter(s => s.id !== id));
+  };
+
+  const addPlainNote = () => {
+    if (!newPlainNoteData.title) return;
+    if (editingPlainNoteId) {
+      setNoteSections(prev => prev.map(section => {
+        if (section.id === activeSectionId) {
+          return {
+            ...section,
+            notes: section.notes.map(n => n.id === editingPlainNoteId ? { ...n, ...newPlainNoteData } : n)
+          };
+        }
+        return section;
+      }));
+      setEditingPlainNoteId(null);
+    } else {
+      const newNote = { id: Date.now().toString(), ...newPlainNoteData, timestamp: new Date().toLocaleString() };
+      setNoteSections(prev => prev.map(section => {
+        if (section.id === activeSectionId) {
+          return { ...section, notes: [newNote, ...section.notes] };
+        }
+        return section;
+      }));
+    }
+    setNewPlainNoteData({ title: '', content: '' });
+    setIsAddingPlainNote(false);
+  };
+
+  const deletePlainNote = (sectionId, noteId) => {
+    setNoteSections(prev => prev.map(section => {
+      if (section.id === sectionId) {
+        return { ...section, notes: section.notes.filter(n => n.id !== noteId) };
+      }
+      return section;
+    }));
+  };
 
   if (!isAuthenticated) {
     return (
@@ -517,7 +585,7 @@ const Notes = () => {
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Personal Folders</span>
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Goal Tracking</span>
                   <button onClick={() => setIsAddingFolder(true)} className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-400 hover:scale-110 active:scale-90 transition-all"><FolderPlus className="w-4 h-4" /></button>
                 </div>
                 <div className="space-y-1.5">
@@ -525,9 +593,27 @@ const Notes = () => {
                     <div className="flex items-center gap-2 p-3 bg-slate-900 rounded-2xl border border-indigo-500/50"><input autoFocus type="text" className="w-full bg-transparent border-none text-sm text-slate-200 focus:outline-none font-bold" placeholder="Folder Name" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addFolder()}/><button onClick={() => setIsAddingFolder(false)} className="text-slate-500"><X className="w-4 h-4" /></button></div>
                   )}
                   {folders.map(folder => (
-                    <div key={folder.id} onClick={() => { setActiveFolderId(folder.id); setActiveTab('notes'); setIsSidebarOpen(false); }} className={`group flex items-center justify-between p-3.5 rounded-2xl cursor-pointer transition-all ${activeTab === 'notes' && activeFolderId === folder.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800/50'}`}>
-                      <div className="flex items-center gap-3 truncate"><FolderIcon className={`w-4 h-4 shrink-0 ${(activeTab === 'notes' && activeFolderId === folder.id) ? 'fill-white/20' : 'fill-slate-500/20'}`} /><span className="truncate text-sm font-bold">{folder.name}</span></div>
-                      <button onClick={(e) => { e.stopPropagation(); deleteFolder(folder.id); }} className={`p-1 transition-all ${activeTab === 'notes' && activeFolderId === folder.id ? 'opacity-40 hover:opacity-100' : 'opacity-0 group-hover:opacity-100 hover:text-red-400'}`}><Trash2 className="w-3.5 h-3.5" /></button>
+                    <div key={folder.id} onClick={() => { setActiveFolderId(folder.id); setActiveTab('tasks'); setIsSidebarOpen(false); }} className={`group flex items-center justify-between p-3.5 rounded-2xl cursor-pointer transition-all ${activeTab === 'tasks' && activeFolderId === folder.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800/50'}`}>
+                      <div className="flex items-center gap-3 truncate"><FolderIcon className={`w-4 h-4 shrink-0 ${(activeTab === 'tasks' && activeFolderId === folder.id) ? 'fill-white/20' : 'fill-slate-500/20'}`} /><span className="truncate text-sm font-bold">{folder.name}</span></div>
+                      <button onClick={(e) => { e.stopPropagation(); deleteFolder(folder.id); }} className={`p-1 transition-all ${activeTab === 'tasks' && activeFolderId === folder.id ? 'opacity-40 hover:opacity-100' : 'opacity-0 group-hover:opacity-100 hover:text-red-400'}`}><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Digital Notebook</span>
+                  <button onClick={() => setIsAddingSection(true)} className="p-1.5 bg-violet-500/10 rounded-lg text-violet-400 hover:scale-110 active:scale-90 transition-all"><Plus className="w-4 h-4" /></button>
+                </div>
+                <div className="space-y-1.5">
+                  {isAddingSection && (
+                    <div className="flex items-center gap-2 p-3 bg-slate-900 rounded-2xl border border-violet-500/50"><input autoFocus type="text" className="w-full bg-transparent border-none text-sm text-slate-200 focus:outline-none font-bold" placeholder="Section Name" value={newSectionName} onChange={(e) => setNewSectionName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addSection()}/><button onClick={() => setIsAddingSection(false)} className="text-slate-500"><X className="w-4 h-4" /></button></div>
+                  )}
+                  {noteSections.map(section => (
+                    <div key={section.id} onClick={() => { setActiveSectionId(section.id); setActiveTab('notebook'); setIsSidebarOpen(false); }} className={`group flex items-center justify-between p-3.5 rounded-2xl cursor-pointer transition-all ${activeTab === 'notebook' && activeSectionId === section.id ? 'bg-violet-600 text-white' : 'text-slate-400 hover:bg-slate-800/50'}`}>
+                      <div className="flex items-center gap-3 truncate"><FileText className={`w-4 h-4 shrink-0 ${(activeTab === 'notebook' && activeSectionId === section.id) ? 'fill-white/20' : 'fill-slate-500/20'}`} /><span className="truncate text-sm font-bold">{section.name}</span></div>
+                      <button onClick={(e) => { e.stopPropagation(); deleteSection(section.id); }} className={`p-1 transition-all ${activeTab === 'notebook' && activeSectionId === section.id ? 'opacity-40 hover:opacity-100' : 'opacity-0 group-hover:opacity-100 hover:text-red-400'}`}><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
                 </div>
@@ -536,8 +622,8 @@ const Notes = () => {
               <div className="space-y-4">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-2">Management Portal</span>
                 <div className="space-y-1.5 text-slate-400">
-                  <button onClick={() => { setActiveTab('resume'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl font-bold transition-all text-sm ${activeTab === 'resume' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800/50'}`}><FileText className="w-4 h-4" /> Resume Portal</button>
-                  <button onClick={() => { setActiveTab('contacts'); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between p-3.5 rounded-2xl font-bold transition-all text-sm ${activeTab === 'contacts' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800/50'}`}><div className="flex items-center gap-3.5"><Mail className="w-4 h-4" /> Inquiries</div>{contacts.length > 0 && <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'contacts' ? 'bg-white/20 text-white' : 'bg-indigo-500/10 text-indigo-400'}`}>{contacts.length}</span>}</button>
+                  <button onClick={() => { setActiveTab('resume'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl font-bold transition-all text-sm ${activeTab === 'resume' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800/50'}`}><ShieldCheck className="w-4 h-4" /> Resume Portal</button>
+                  <button onClick={() => { setActiveTab('contacts'); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between p-3.5 rounded-2xl font-bold transition-all text-sm ${activeTab === 'contacts' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800/50'}`}><div className="flex items-center gap-3.5"><Mail className="w-4 h-4" /> Inquiry Log</div>{contacts.length > 0 && <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'contacts' ? 'bg-white/20 text-white' : 'bg-indigo-500/10 text-indigo-400'}`}>{contacts.length}</span>}</button>
                   <a href="https://calandar-alpha.vercel.app/" target="_blank" rel="noopener noreferrer" className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl font-bold transition-all text-sm text-slate-400 hover:bg-slate-800/50">
                     <Calendar className="w-4 h-4" /> Schedule Meetings
                   </a>
@@ -549,7 +635,7 @@ const Notes = () => {
 
           <div className="flex-1 flex flex-col bg-slate-950/10 relative h-full">
             <AnimatePresence mode="wait">
-              {activeTab === 'notes' ? (
+              {activeTab === 'tasks' ? (
                 <motion.div key={activeFolderId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col h-full">
                   {activeFolder ? (
                     <>
@@ -663,6 +749,55 @@ const Notes = () => {
                     </>
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-slate-800 h-full"><LayoutDashboard className="w-16 h-16 mb-4 opacity-10" /><p className="font-black uppercase tracking-[0.2em] text-[10px]">Select a folder</p></div>
+                  )}
+                </motion.div>
+              ) : activeTab === 'notebook' ? (
+                <motion.div key={activeSectionId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col h-full">
+                  {activeSection ? (
+                    <>
+                      <div className="p-4 sm:p-8 border-b border-slate-800/50 flex flex-col xs:flex-row justify-between items-start xs:items-center gap-4 bg-slate-950/30 backdrop-blur-xl">
+                        <div><h3 className="text-lg sm:text-2xl font-black text-white flex items-center gap-2 sm:gap-3 uppercase tracking-tight">{activeSection.name}<span className="text-[9px] sm:text-[10px] font-black text-slate-600 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">{activeSection.notes.length} Notes</span></h3></div>
+                        <button onClick={() => setIsAddingPlainNote(true)} className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-5 py-3 rounded-2xl transition-all text-xs font-black uppercase tracking-widest shadow-xl"><Plus className="w-4 h-4" /> New Note</button>
+                      </div>
+
+                      <div className="flex-1 p-4 sm:p-8">
+                        {isAddingPlainNote && (
+                          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-900 border border-violet-500/40 rounded-[2.5rem] p-8 mb-8 shadow-2xl backdrop-blur-3xl sticky top-0 z-10">
+                            <input autoFocus type="text" placeholder="Note Title" className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 mb-6 text-slate-100 focus:outline-none focus:border-violet-500 font-bold text-lg" value={newPlainNoteData.title} onChange={(e) => setNewPlainNoteData({...newPlainNoteData, title: e.target.value})}/>
+                            <textarea placeholder="Write your thoughts..." className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-5 mb-8 text-slate-300 focus:outline-none focus:border-violet-500 min-h-[200px] resize-none text-sm leading-relaxed" value={newPlainNoteData.content} onChange={(e) => setNewPlainNoteData({...newPlainNoteData, content: e.target.value})}/>
+                            <div className="flex gap-4">
+                              <button onClick={() => { setIsAddingPlainNote(false); setEditingPlainNoteId(null); setNewPlainNoteData({ title: '', content: '' }); }} className="flex-1 bg-slate-800 py-4 rounded-2xl text-slate-400 font-black uppercase text-[10px] tracking-widest">Cancel</button>
+                              <button onClick={addPlainNote} className="flex-[2] bg-violet-600 py-4 rounded-2xl text-white font-black uppercase text-[10px] tracking-widest shadow-xl">{editingPlainNoteId ? 'Update Note' : 'Save Note'}</button>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {activeSection.notes.map(note => (
+                            <motion.div key={note.id} layout className="bg-slate-900/60 border border-slate-800 p-6 sm:p-8 rounded-[2.5rem] hover:border-violet-500/30 transition-all group flex flex-col shadow-xl">
+                              <div className="flex justify-between items-start mb-6">
+                                <div>
+                                  <h4 className="text-lg sm:text-xl font-black text-slate-100 tracking-tight leading-tight mb-2">{note.title}</h4>
+                                  <span className="text-[9px] font-mono text-slate-600 italic uppercase">{note.timestamp}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={() => { setEditingPlainNoteId(note.id); setNewPlainNoteData({ title: note.title, content: note.content }); setIsAddingPlainNote(true); }} className="p-2.5 bg-slate-800/50 text-slate-500 hover:text-violet-400 rounded-xl transition-all"><Edit2 className="w-4 h-4" /></button>
+                                  <button onClick={() => deletePlainNote(activeSection.id, note.id)} className="p-2.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-red-500/20"><Trash2 className="w-4 h-4" /></button>
+                                </div>
+                              </div>
+                              <div className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap flex-1 break-words">
+                                {renderContentWithLinks(note.content)}
+                              </div>
+                            </motion.div>
+                          ))}
+                          {activeSection.notes.length === 0 && !isAddingPlainNote && (
+                            <div className="col-span-full h-64 border-2 border-dashed border-slate-800 rounded-[3rem] flex flex-col items-center justify-center text-slate-700 text-center opacity-40"><MessageSquare className="w-12 h-12 mb-4" /><p className="font-black uppercase tracking-widest text-[10px]">No notes in this section</p></div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-800 h-full"><FilePlus className="w-16 h-16 mb-4 opacity-10" /><p className="font-black uppercase tracking-[0.2em] text-[10px]">Select a section</p></div>
                   )}
                 </motion.div>
               ) : activeTab === 'resume' ? (
