@@ -514,6 +514,9 @@ const Notes = () => {
                 <div className="space-y-1.5 text-slate-400">
                   <button onClick={() => { setActiveTab('resume'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl font-bold transition-all text-sm ${activeTab === 'resume' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800/50'}`}><FileText className="w-4 h-4" /> Resume Portal</button>
                   <button onClick={() => { setActiveTab('contacts'); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between p-3.5 rounded-2xl font-bold transition-all text-sm ${activeTab === 'contacts' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800/50'}`}><div className="flex items-center gap-3.5"><Mail className="w-4 h-4" /> Inquiries</div>{contacts.length > 0 && <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'contacts' ? 'bg-white/20 text-white' : 'bg-indigo-500/10 text-indigo-400'}`}>{contacts.length}</span>}</button>
+                  <a href="https://calandar-alpha.vercel.app/" target="_blank" rel="noopener noreferrer" className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl font-bold transition-all text-sm text-slate-400 hover:bg-slate-800/50">
+                    <Calendar className="w-4 h-4" /> Schedule Meetings
+                  </a>
                 </div>
               </div>
             </div>
