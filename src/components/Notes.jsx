@@ -603,7 +603,7 @@ const Notes = () => {
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Digital Notebook</span>
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Workspace Notebook</span>
                   <button onClick={() => setIsAddingSection(true)} className="p-1.5 bg-violet-500/10 rounded-lg text-violet-400 hover:scale-110 active:scale-90 transition-all"><Plus className="w-4 h-4" /></button>
                 </div>
                 <div className="space-y-1.5">
@@ -756,7 +756,7 @@ const Notes = () => {
                   {activeSection ? (
                     <>
                       <div className="p-4 sm:p-8 border-b border-slate-800/50 flex flex-col xs:flex-row justify-between items-start xs:items-center gap-4 bg-slate-950/30 backdrop-blur-xl">
-                        <div><h3 className="text-lg sm:text-2xl font-black text-white flex items-center gap-2 sm:gap-3 uppercase tracking-tight">{activeSection.name}<span className="text-[9px] sm:text-[10px] font-black text-slate-600 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">{activeSection.notes.length} Notes</span></h3></div>
+                        <div><h3 className="text-lg sm:text-2xl font-black text-white flex items-center gap-2 sm:gap-3 uppercase tracking-tight">{activeSection.name}<span className="text-[9px] sm:text-[10px] font-black text-slate-600 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">{activeSection.notes.length} Workspace</span></h3></div>
                         <button onClick={() => setIsAddingPlainNote(true)} className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-5 py-3 rounded-2xl transition-all text-xs font-black uppercase tracking-widest shadow-xl"><Plus className="w-4 h-4" /> New Note</button>
                       </div>
 
