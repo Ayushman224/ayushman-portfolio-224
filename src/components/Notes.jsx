@@ -35,8 +35,9 @@ const Notes = () => {
   );
 
   // Dashboard State (Internalized)
-  const [resumeUrl, setResumeUrl] = useState(() => localStorage.getItem('portfolio-resume-url') || '');
-  const [resumeName, setResumeName] = useState(() => localStorage.getItem('portfolio-resume-name') || '');
+  const FALLBACK_RESUME_URL = "https://drive.google.com/file/d/1ylW-F0XY-2A4fm2cT6GkBnnLQjX8YryR/view?usp=drive_link";
+  const [resumeUrl, setResumeUrl] = useState(() => localStorage.getItem('portfolio-resume-url') || FALLBACK_RESUME_URL);
+  const [resumeName, setResumeName] = useState(() => localStorage.getItem('portfolio-resume-name') || 'Ayushman_Resume.pdf');
   const [contacts, setContacts] = useState(() => {
     const saved = localStorage.getItem('portfolio-contacts');
     return saved ? JSON.parse(saved) : [];

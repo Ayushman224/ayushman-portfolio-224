@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Linkedin, MapPin, Phone } from 'lucide-react';
 
+const FALLBACK_RESUME_URL = "https://drive.google.com/file/d/1ylW-F0XY-2A4fm2cT6GkBnnLQjX8YryR/view?usp=drive_link";
+
 const Hero = () => {
-  const [resumeUrl, setResumeUrl] = useState(() => localStorage.getItem('portfolio-resume-url'));
+  const [resumeUrl, setResumeUrl] = useState(() => localStorage.getItem('portfolio-resume-url') || FALLBACK_RESUME_URL);
 
   return (
     <section id="home" className="min-h-screen flex items-center justify-center pt-20 pb-10 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
@@ -31,10 +33,9 @@ const Hero = () => {
             <a href="/#projects" className="px-8 py-3 rounded-full bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30">
               View Work
             </a>
-            {resumeUrl && (
+            {(resumeUrl || FALLBACK_RESUME_URL) && (
               <a 
-                href={resumeUrl} 
-                download="Ayushman_Tripathi_Resume"
+                href={resumeUrl || FALLBACK_RESUME_URL} 
                 target="_blank"
                 rel="noreferrer"
                 className="px-8 py-3 rounded-full border border-indigo-500/30 bg-indigo-500/5 text-indigo-400 font-medium hover:bg-indigo-500/10 transition-all flex items-center gap-2"
