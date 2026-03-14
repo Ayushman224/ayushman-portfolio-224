@@ -27,15 +27,19 @@ const Education = () => {
     <section id="education" className="py-20 px-4 sm:px-6 lg:px-8 border-t border-slate-900 bg-slate-900/40 relative">
       <div className="max-w-4xl mx-auto">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.5 }}
+          className="text-center mb-16"
         >
-          <h2 className="text-3xl md:text-4xl font-bold mb-12 flex items-center gap-4">
-            <span className="text-indigo-500 font-mono text-2xl">05.</span> Education
-            <div className="h-px bg-slate-800 flex-1 mt-2"></div>
+          <h2 className="text-3xl md:text-5xl font-black mb-6 text-white tracking-tight">
+            Academic <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">Foundation</span>
           </h2>
+          <p className="text-slate-400 max-w-2xl mx-auto text-lg leading-relaxed">
+            My journey of academic excellence in computer science and engineering.
+          </p>
+        </motion.div>
 
           <div className="space-y-6">
             {educations.map((edu, index) => (
@@ -65,7 +69,6 @@ const Education = () => {
               </motion.div>
             ))}
           </div>
-        </motion.div>
       </div>
     </section>
   );

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FolderPlus, FilePlus, Folder as FolderIcon, CheckCircle2, Clock, Trash2, X, Lock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FolderPlus, FilePlus, Folder as FolderIcon, CheckCircle2, Clock, Trash2, X, Lock, ArrowLeft } from 'lucide-react';
 
 const Notes = () => {
+  const navigate = useNavigate();
   const [folders, setFolders] = useState(() => {
     const saved = localStorage.getItem('portfolio-notes');
     if (saved) {
@@ -151,10 +153,19 @@ const Notes = () => {
            viewport={{ once: true, margin: "-100px" }}
            transition={{ duration: 0.5 }}
         >
-          <h2 className="text-3xl md:text-4xl font-bold mb-8 flex items-center gap-4">
-            <span className="text-indigo-500 font-mono text-2xl">06.</span> Workspace Notes
-            <div className="h-px bg-slate-800 flex-1 mt-2"></div>
-          </h2>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <h2 className="text-3xl md:text-4xl font-bold flex items-center gap-4">
+              <span className="text-indigo-500 font-mono text-2xl">06.</span> Workspace Notes
+              <div className="hidden md:block h-px bg-slate-800 w-32 mt-2"></div>
+            </h2>
+            <button 
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900/50 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 transition-all group"
+            >
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              Back to Portfolio
+            </button>
+          </div>
 
           <div className="flex flex-col md:flex-row gap-0 h-[600px] bg-slate-900/40 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
             {/* Sidebar - Folders */}

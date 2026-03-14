@@ -17,13 +17,13 @@ const About = () => {
           
           <div className="text-lg text-slate-300 leading-relaxed space-y-6">
             <p>
-              I am a dedicated Software Developer with a strong foundation in modern technologies. My expertise initially grew around crafting scalable, high-performance front-end web applications, but I have since expanded my horizons into building robust automated workflows and backend systems.
+              I am a dedicated **Software Developer** with a passion for building elegant, functional, and user-centric digital solutions. My expertise lies in crafting scalable, high-performance web applications that leverage modern front-end technologies to deliver seamless user experiences.
             </p>
             <p>
-              While I specialize in clean UI implementation using <span className="text-indigo-400 font-medium">React</span> and <span className="text-indigo-400 font-medium">Tailwind CSS</span>, I am also deeply engaged in writing <span className="text-indigo-400 font-medium">Python</span> automation scripts to streamline processes. Additionally, I am actively learning and applying backend development (such as Node.js and SQL architectures) to construct seamless, full-stack ecosystems.
+              I specialize in robust UI implementation using <span className="text-indigo-400 font-medium">React</span> and <span className="text-indigo-400 font-medium">Tailwind CSS</span>, while maintaining a strong focus on clean architecture and efficient state management. Beyond the frontend, I am proficient in <span className="text-indigo-400 font-medium">Python</span> for automation and am actively expanding my full-stack capabilities with **Node.js** and **SQL**.
             </p>
             <p>
-              I am passionate about problem-solving, writing clean and maintainable code, and continuously adapting to new challenges in the ever-evolving tech landscape. Let's work together to build something amazing!
+              With a background in **Computer Science & Engineering**, I combine technical rigor with a creative approach to problem-solving. Whether it's developing real-time dashboards or implementing complex biometric security systems, I thrive on turning ideas into high-impact reality.
             </p>
           </div>
         </motion.div>

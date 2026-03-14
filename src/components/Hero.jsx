@@ -21,7 +21,7 @@ const Hero = () => {
             Software Developer
           </h2>
           <p className="text-lg text-slate-400 mb-8 max-w-2xl mx-auto leading-relaxed">
-            Specializing in React and Tailwind CSS for the frontend, leveraging Python for robust automation, and continually expanding my expertise into backend development to build cohesive, end-to-end scalable applications.
+            Specializing in **React** and **Tailwind CSS**, I am focused on building scalable, high-performance web applications with clean UI, efficient state management, and seamless API integration. Currently leveraging **Python** for robust automation and expanding into full-stack backend architectures.
           </p>
           
           <div className="flex flex-wrap justify-center gap-4 mb-12">
