@@ -67,7 +67,12 @@ const Certifications = () => {
                   {cert.description}
                 </p>
                 
-                <a href="#" className="inline-flex items-center gap-2 text-sm font-bold text-slate-100 px-6 py-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">
+                <a 
+                  href="https://www.linkedin.com/in/ayushman-tripathi-58b339225/details/certifications/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="inline-flex items-center gap-2 text-sm font-bold text-slate-100 px-6 py-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors"
+                >
                   Verify Credentials
                   <ExternalLink className="w-4 h-4" />
                 </a>

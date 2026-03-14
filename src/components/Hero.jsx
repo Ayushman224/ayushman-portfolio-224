@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { Mail, Linkedin, MapPin, Phone } from 'lucide-react';
 
 const FALLBACK_RESUME_URL = "https://drive.google.com/file/d/1ylW-F0XY-2A4fm2cT6GkBnnLQjX8YryR/view?usp=drive_link";
@@ -43,16 +44,16 @@ const Hero = () => {
                 Download Resume
               </a>
             )}
-            <a href="/#contact" className="px-8 py-3 rounded-full border border-slate-700 bg-slate-800/50 text-slate-300 font-medium hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2">
+            <Link to="/contact" className="px-8 py-3 rounded-full border border-slate-700 bg-slate-800/50 text-slate-300 font-medium hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2">
               <Mail className="w-5 h-5" />
               Contact Me
-            </a>
+            </Link>
           </div>
 
           <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-4 text-slate-400">
-            <a href="/#contact" className="flex items-center gap-2 hover:text-indigo-400 transition-colors">
+            <Link to="/contact" className="flex items-center gap-2 hover:text-indigo-400 transition-colors">
               <Mail className="w-5 h-5" /> ayushmantripathi224@gmail.com
-            </a>
+            </Link>
             <a href="tel:+918318007109" className="flex items-center gap-2 hover:text-indigo-400 transition-colors">
               <Phone className="w-5 h-5" /> +91 8318007109
             </a>

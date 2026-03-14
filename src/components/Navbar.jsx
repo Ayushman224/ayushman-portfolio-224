@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 const navLinks = [
   { name: 'Home', href: '/#home' },
@@ -37,13 +38,23 @@ export default function Navbar() {
           
           <div className="hidden md:flex space-x-8">
             {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
-                className="text-slate-300 hover:text-indigo-400 font-medium transition-colors"
-              >
-                {link.name}
-              </a>
+              link.href.startsWith('/') && !link.href.includes('#') ? (
+                <Link
+                  key={link.name}
+                  to={link.href}
+                  className="text-slate-300 hover:text-indigo-400 font-medium transition-colors"
+                >
+                  {link.name}
+                </Link>
+              ) : (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  className="text-slate-300 hover:text-indigo-400 font-medium transition-colors"
+                >
+                  {link.name}
+                </a>
+              )
             ))}
           </div>
 
@@ -66,14 +77,25 @@ export default function Navbar() {
         >
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
             {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
-                onClick={() => setIsOpen(false)}
-                className="block px-3 py-2 text-base font-medium text-slate-300 hover:text-indigo-400 hover:bg-slate-800 rounded-md"
-              >
-                {link.name}
-              </a>
+              link.href.startsWith('/') && !link.href.includes('#') ? (
+                <Link
+                  key={link.name}
+                  to={link.href}
+                  onClick={() => setIsOpen(false)}
+                  className="block px-3 py-2 text-base font-medium text-slate-300 hover:text-indigo-400 hover:bg-slate-800 rounded-md"
+                >
+                  {link.name}
+                </Link>
+              ) : (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  onClick={() => setIsOpen(false)}
+                  className="block px-3 py-2 text-base font-medium text-slate-300 hover:text-indigo-400 hover:bg-slate-800 rounded-md"
+                >
+                  {link.name}
+                </a>
+              )
             ))}
           </div>
         </motion.div>
