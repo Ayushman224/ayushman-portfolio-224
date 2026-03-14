@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   FolderPlus, FilePlus, Folder as FolderIcon, CheckCircle2, Clock, Trash2, X, Lock, ArrowLeft,
   FileText, Upload, Download, Mail, User, MessageSquare, LayoutDashboard, ShieldCheck,
-  ChevronRight, Settings, Bell, BellRing, Calendar, Menu, Info, MousePointer2, Plus
+  ChevronRight, Settings, Bell, BellRing, Calendar, Menu, Info, MousePointer2, Plus,
+  Pause, Play, Square, Edit2, Save
 } from 'lucide-react';
 
 const Notes = () => {
@@ -19,6 +20,7 @@ const Notes = () => {
   const [isAddingFolder, setIsAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isAddingNote, setIsAddingNote] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
   const [newNoteData, setNewNoteData] = useState({ title: '', content: '', status: 'Under Progress', time: '' });
 
   // Mobile Sidebar State
@@ -33,6 +35,98 @@ const Notes = () => {
   const [notificationPermission, setNotificationPermission] = useState(
     typeof window !== 'undefined' ? Notification.permission : 'default'
   );
+
+  // Work Timer State
+  const [activeWorkTaskId, setActiveWorkTaskId] = useState(() => localStorage.getItem('active-work-task-id') || null);
+  const [isTimerPaused, setIsTimerPaused] = useState(() => localStorage.getItem('is-timer-paused') === 'true');
+  const [workStartTime, setWorkStartTime] = useState(() => {
+    const saved = localStorage.getItem('work-start-time');
+    return saved && saved !== "null" ? parseInt(saved) : null;
+  });
+  const [accumulatedSessionTime, setAccumulatedSessionTime] = useState(() => {
+    const saved = localStorage.getItem('accumulated-session-time');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [elapsedSessionTime, setElapsedSessionTime] = useState(0);
+
+  // Helper: Format Duration (ms to H:m:s)
+  const formatDuration = (ms) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours > 0 ? hours + 'h ' : ''}${minutes}m ${seconds}s`;
+  };
+
+  // Timer Effect
+  useEffect(() => {
+    let interval;
+    if (activeWorkTaskId && workStartTime && !isTimerPaused) {
+      interval = setInterval(() => {
+        setElapsedSessionTime(accumulatedSessionTime + (Date.now() - workStartTime));
+      }, 1000);
+    } else {
+      setElapsedSessionTime(accumulatedSessionTime);
+    }
+    return () => clearInterval(interval);
+  }, [activeWorkTaskId, workStartTime, isTimerPaused, accumulatedSessionTime]);
+
+  // Persist Timer
+  useEffect(() => {
+    if (activeWorkTaskId) {
+      localStorage.setItem('active-work-task-id', activeWorkTaskId);
+      localStorage.setItem('work-start-time', workStartTime ? workStartTime.toString() : "null");
+      localStorage.setItem('is-timer-paused', isTimerPaused.toString());
+      localStorage.setItem('accumulated-session-time', accumulatedSessionTime.toString());
+    } else {
+      localStorage.removeItem('active-work-task-id');
+      localStorage.removeItem('work-start-time');
+      localStorage.removeItem('is-timer-paused');
+      localStorage.removeItem('accumulated-session-time');
+    }
+  }, [activeWorkTaskId, workStartTime, isTimerPaused, accumulatedSessionTime]);
+
+  const startWorkSession = (taskId) => {
+    if (activeWorkTaskId) stopWorkSession();
+    setActiveWorkTaskId(taskId);
+    setWorkStartTime(Date.now());
+    setIsTimerPaused(false);
+    setAccumulatedSessionTime(0);
+  };
+
+  const pauseWorkSession = () => {
+    if (!activeWorkTaskId || isTimerPaused) return;
+    setAccumulatedSessionTime(prev => prev + (Date.now() - workStartTime));
+    setWorkStartTime(null);
+    setIsTimerPaused(true);
+  };
+
+  const resumeWorkSession = () => {
+    if (!activeWorkTaskId || !isTimerPaused) return;
+    setWorkStartTime(Date.now());
+    setIsTimerPaused(false);
+  };
+
+  const stopWorkSession = () => {
+    if (!activeWorkTaskId) return;
+    
+    const finalElapsed = isTimerPaused ? accumulatedSessionTime : accumulatedSessionTime + (Date.now() - workStartTime);
+    setFolders(prev => prev.map(folder => ({
+      ...folder,
+      notes: folder.notes.map(note => {
+        if (note.id === activeWorkTaskId) {
+          return { ...note, totalWorkTime: (note.totalWorkTime || 0) + finalElapsed };
+        }
+        return note;
+      })
+    })));
+
+    setActiveWorkTaskId(null);
+    setWorkStartTime(null);
+    setIsTimerPaused(false);
+    setAccumulatedSessionTime(0);
+    setElapsedSessionTime(0);
+  };
 
   // Dashboard State (Internalized)
   const FALLBACK_RESUME_URL = "https://drive.google.com/file/d/1ylW-F0XY-2A4fm2cT6GkBnnLQjX8YryR/view?usp=drive_link";
@@ -96,6 +190,10 @@ const Notes = () => {
       folders.forEach(folder => {
         folder.notes.forEach(note => {
           if (note.time && note.status !== 'Completed') {
+            
+            // NEW: Silence notifications if we are actively working on this specific project
+            if (activeWorkTaskId === note.id) return;
+
             const taskTime = new Date(note.time).getTime();
             const alertData = processedAlerts.find(a => a.id === note.id);
 
@@ -116,7 +214,6 @@ const Notes = () => {
             if (shouldTrigger && newAlertObject) {
               // A. Trigger UI Toast
               setActiveAlerts(prev => {
-                // Prevent duplicate UI toasts for the same trigger
                 if (prev.some(p => p.id === note.id)) return prev;
                 return [...prev, { ...note, folderName: folder.name, alertCount: newAlertObject.count }];
               });
@@ -125,22 +222,16 @@ const Notes = () => {
                 ? `Goal Started: ${note.title}` 
                 : `Snooze Reminder (30m): ${note.title}`;
 
-              // B. Trigger System Notification (PWA/Background)
-              triggerSystemNotification(
-                alertMsg,
-                `Workspace Hub: Task from folder ${folder.name}`
-              );
+              triggerSystemNotification(alertMsg, `Workspace Hub: In folder ${folder.name}`);
 
-              // C. Trigger Service Worker (Native Phone Tray)
               if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                 navigator.serviceWorker.controller.postMessage({
                   type: 'SHOW_NOTIFICATION',
                   title: alertMsg,
-                  body: `Review your progress in ${folder.name}`
+                  body: `Review progress in ${folder.name}`
                 });
               }
 
-              // Update Persistent State
               setProcessedAlerts(prev => {
                 const filtered = prev.filter(a => a.id !== note.id);
                 return [...filtered, newAlertObject];
@@ -151,10 +242,9 @@ const Notes = () => {
       });
     };
 
-    const interval = setInterval(checkTasks, 5000); // Check every 5 seconds
+    const interval = setInterval(checkTasks, 5000);
     return () => clearInterval(interval);
-  }, [folders, processedAlerts]);
-
+  }, [folders, processedAlerts, activeWorkTaskId]);
 
   // Enhanced Security: SHA-256 Hashing
   const ADMIN_HASH = "ab5aa97074c454a0632057e704220d9a6678fbf773a0a5806fc09b8173b07309";
@@ -198,15 +288,54 @@ const Notes = () => {
   };
 
   const addNote = () => {
-    if (!newNoteData.title.trim()) return;
-    setFolders(folders.map(folder => {
-      if (folder.id === activeFolderId) {
-        return { ...folder, notes: [{ ...newNoteData, id: Date.now().toString() }, ...folder.notes] };
-      }
-      return folder;
-    }));
+    if (!newNoteData.title) return;
+    
+    if (editingNoteId) {
+      // Logic for editing existing note
+      setFolders(prev => prev.map(folder => {
+        if (folder.id === activeFolderId) {
+          return {
+            ...folder,
+            notes: folder.notes.map(note => {
+              if (note.id === editingNoteId) {
+                return { ...note, ...newNoteData };
+              }
+              return note;
+            })
+          };
+        }
+        return folder;
+      }));
+      setEditingNoteId(null);
+    } else {
+      // Logic for adding new note
+      const newNote = {
+        id: Date.now().toString(),
+        ...newNoteData,
+        totalWorkTime: 0
+      };
+
+      setFolders(folders.map(folder => {
+        if (folder.id === activeFolderId) {
+          return { ...folder, notes: [newNote, ...folder.notes] };
+        }
+        return folder;
+      }));
+    }
+
     setNewNoteData({ title: '', content: '', status: 'Under Progress', time: '' });
     setIsAddingNote(false);
+  };
+
+  const startEditing = (note) => {
+    setEditingNoteId(note.id);
+    setNewNoteData({
+      title: note.title,
+      content: note.content,
+      status: note.status,
+      time: note.time
+    });
+    setIsAddingNote(true);
   };
 
   const deleteFolder = (id) => {
@@ -322,7 +451,7 @@ const Notes = () => {
         </AnimatePresence>
       </div>
 
-      <div className="max-w-7xl mx-auto flex flex-col h-[calc(100vh-140px)] sm:h-[calc(100vh-160px)] min-h-[500px] sm:min-h-[700px]">
+      <div className="max-w-7xl mx-auto flex flex-col min-h-screen pb-12">
         {notificationPermission === 'default' && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4 sm:mb-6 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 mx-2 sm:mx-0">
             <div className="flex items-center gap-3"><Info className="w-5 h-5 text-indigo-400 shrink-0" /><p className="text-[10px] sm:text-xs font-bold text-slate-300 text-center sm:text-left">Enable <span className="text-white">Push Notifications</span> for background alerts.</p></div>
@@ -391,7 +520,7 @@ const Notes = () => {
             <div className="p-6 border-t border-slate-800/50 bg-slate-950/20 mt-auto"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500"><User className="w-4 h-4" /></div><div className="flex-1 overflow-hidden"><p className="text-[10px] font-black text-white uppercase truncate">Ayushman Tripathi</p><p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Admin Role</p></div><Settings className="w-4 h-4 text-slate-700 pointer-hover" /></div></div>
           </div>
 
-          <div className="flex-1 flex flex-col bg-slate-950/10 relative overflow-hidden h-full">
+          <div className="flex-1 flex flex-col bg-slate-950/10 relative h-full">
             <AnimatePresence mode="wait">
               {activeTab === 'notes' ? (
                 <motion.div key={activeFolderId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col h-full">
@@ -402,7 +531,7 @@ const Notes = () => {
                         <button onClick={() => setIsAddingNote(true)} className="hidden sm:flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl transition-all text-xs font-black uppercase tracking-widest shadow-xl"><FilePlus className="w-4 h-4" /> Create task</button>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar">
+                      <div className="flex-1 p-4 sm:p-8">
                         {isAddingNote && (
                           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-900/98 border border-indigo-500/40 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 mb-8 shadow-2xl backdrop-blur-3xl sticky top-0 z-10 mx-1">
                             <input autoFocus type="text" placeholder="Title" className="w-full bg-slate-950 border border-slate-800 rounded-xl sm:rounded-2xl px-5 sm:px-6 py-3.5 sm:py-4 mb-4 sm:mb-6 text-slate-100 focus:outline-none focus:border-indigo-500 font-bold text-base sm:text-lg" value={newNoteData.title} onChange={(e) => setNewNoteData({...newNoteData, title: e.target.value})}/>
@@ -421,7 +550,7 @@ const Notes = () => {
                                 <select className="w-full bg-slate-950 border-2 border-slate-800 rounded-xl sm:rounded-[1.5rem] px-4 py-3 sm:px-6 sm:py-4 text-xs font-black uppercase text-indigo-400 appearance-none focus:outline-none focus:border-indigo-500" value={newNoteData.status} onChange={(e) => setNewNoteData({...newNoteData, status: e.target.value})}><option value="Under Progress">Under Progress</option><option value="Completed">Completed</option></select>
                               </div>
                             </div>
-                            <div className="flex gap-3 sm:gap-4"><button onClick={() => setIsAddingNote(false)} className="flex-1 px-4 sm:px-8 py-4 text-xs font-black uppercase text-slate-500 hover:text-slate-300">Cancel</button><button onClick={addNote} className="flex-[2] px-6 sm:px-10 py-4 text-xs font-black uppercase bg-indigo-600 text-white rounded-xl sm:rounded-[1.2rem] shadow-xl hover:bg-indigo-500 active:scale-95 transition-all">Add Task</button></div>
+                            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4"><button onClick={addNote} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase text-[10px] tracking-widest py-4 rounded-xl sm:rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2">{editingNoteId ? <Save className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />} {editingNoteId ? 'Update Task' : 'Confirm Task'}</button><button onClick={() => { setIsAddingNote(false); setEditingNoteId(null); setNewNoteData({ title: '', content: '', status: 'Under Progress', time: '' }); }} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-black uppercase text-[10px] tracking-widest py-4 rounded-xl sm:rounded-2xl transition-all">Cancel</button></div>
                           </motion.div>
                         )}
 
@@ -430,16 +559,72 @@ const Notes = () => {
                             <motion.div layout key={note.id} className={`p-5 sm:p-6 rounded-[1.8rem] sm:rounded-[2.5rem] border-2 transition-all group flex flex-col ${note.status === 'Completed' ? 'bg-slate-900/30 border-emerald-500/5' : 'bg-slate-900/60 border-slate-800/80 hover:border-indigo-500/30 shadow-xl'}`}>
                               <div className="flex justify-between items-start mb-3 sm:mb-4 gap-4">
                                 <h4 className={`font-black text-base sm:text-lg tracking-tight leading-tight ${note.status === 'Completed' ? 'text-slate-600 line-through' : 'text-slate-100'}`}>{note.title}</h4>
-                                <button onClick={() => deleteNote(activeFolder.id, note.id)} className="text-slate-700 hover:text-red-400 xs:opacity-0 xs:group-hover:opacity-100 transition-all p-1"><Trash2 className="w-4 h-4" /></button>
+                                <div className="flex items-center gap-2">
+                                  {note.status !== 'Completed' && (
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); startEditing(note); }}
+                                      className="p-2 bg-slate-800/50 hover:bg-indigo-500/20 rounded-xl text-slate-500 hover:text-indigo-400 transition-all border border-transparent hover:border-indigo-500/30"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  <button onClick={(e) => { e.stopPropagation(); deleteNote(activeFolder.id, note.id); }} className="p-2 sm:p-2.5 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl sm:rounded-2xl transition-all border border-red-500/20"><Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></button>
+                                </div>
                               </div>
-                              <p className={`text-xs sm:text-sm mb-6 leading-relaxed flex-1 ${note.status === 'Completed' ? 'text-slate-600' : 'text-slate-400'}`}>{note.content}</p>
+                              <div className="flex-1 overflow-y-auto max-h-40 sm:max-h-48 pr-2 custom-scrollbar-thin mb-6">
+                                <p className={`text-xs sm:text-sm leading-relaxed ${note.status === 'Completed' ? 'text-slate-600' : 'text-slate-400'}`}>
+                                  {note.content}
+                                </p>
+                              </div>
                               <div className="space-y-3 sm:space-y-4 pt-4 border-t border-slate-800/40">
                                 {note.time && (
                                   <div className={`flex items-center gap-2 text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${new Date(note.time) < new Date() && note.status !== 'Completed' ? 'text-red-500' : 'text-slate-500'}`}>
                                     <Bell className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> {formatAMPM(note.time)}
                                   </div>
                                 )}
+                                
+                                {/* Work Timer UI */}
+                                <div className="flex flex-col gap-2 pt-2">
+                                  {activeWorkTaskId === note.id ? (
+                                    <div className="flex flex-col gap-2 bg-indigo-500/10 border border-indigo-500/30 p-3 rounded-xl">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <div className="flex items-center gap-2">
+                                          <div className={`w-2 h-2 rounded-full ${isTimerPaused ? 'bg-amber-500' : 'bg-red-500 animate-ping'}`} />
+                                          <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                                            {isTimerPaused ? 'Paused' : 'Live'}: {formatDuration(elapsedSessionTime + (note.totalWorkTime || 0))}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        {isTimerPaused ? (
+                                          <button onClick={resumeWorkSession} className="flex-1 text-[9px] font-black text-white bg-emerald-600 py-1.5 rounded-lg uppercase tracking-tighter flex items-center justify-center gap-1">
+                                            <Play className="w-3 h-3" /> Resume
+                                          </button>
+                                        ) : (
+                                          <button onClick={pauseWorkSession} className="flex-1 text-[9px] font-black text-white bg-amber-600 py-1.5 rounded-lg uppercase tracking-tighter flex items-center justify-center gap-1">
+                                            <Pause className="w-3 h-3" /> Pause
+                                          </button>
+                                        )}
+                                        <button onClick={stopWorkSession} className="flex-1 text-[9px] font-black text-white bg-red-600 py-1.5 rounded-lg uppercase tracking-tighter flex items-center justify-center gap-1">
+                                          <Square className="w-3 h-3" /> Stop
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between bg-slate-800/30 p-3 rounded-xl border border-slate-800/50 group/timer">
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase">Worked: {formatDuration(note.totalWorkTime || 0)}</span>
+                                      <button 
+                                        onClick={() => startWorkSession(note.id)} 
+                                        className="text-[9px] font-black text-indigo-400 hover:text-white uppercase tracking-tighter flex items-center gap-1 transition-colors"
+                                      >
+                                        <Play className="w-3 h-3" /> Start Mode
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
                                 <button onClick={() => toggleNoteStatus(activeFolder.id, note.id)} className={`w-full flex items-center justify-center gap-2 text-[9px] font-black uppercase py-2.5 sm:py-3 rounded-xl sm:rounded-[1rem] transition-all border ${note.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-indigo-500/5 text-indigo-400 border-indigo-500/20'}`}>{note.status === 'Completed' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />} {note.status}</button>
+
                               </div>
                             </motion.div>
                           ))}

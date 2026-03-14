@@ -22,4 +22,14 @@ html {
   .custom-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors;
   }
+  .custom-scrollbar-thin::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+  }
+  .custom-scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-indigo-500/30 rounded-full hover:bg-indigo-500/50 transition-colors;
+  }
 }
