@@ -5,8 +5,13 @@ import {
   FolderPlus, FilePlus, Folder as FolderIcon, CheckCircle2, Clock, Trash2, X, Lock, ArrowLeft,
   FileText, Upload, Download, Mail, User, MessageSquare, LayoutDashboard, ShieldCheck,
   ChevronRight, Settings, Bell, BellRing, Calendar, Menu, Info, MousePointer2, Plus,
-  Pause, Play, Square, Edit2, Save
+  Pause, Play, Square, Edit2, Save, Import
 } from 'lucide-react';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// pdfjs worker setup
+const pdfVersion = '5.5.207'; 
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfVersion}/build/pdf.worker.min.mjs`;
 
 const Notes = () => {
   const navigate = useNavigate();
@@ -21,7 +26,7 @@ const Notes = () => {
   const [newFolderName, setNewFolderName] = useState('');
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
-  const [newNoteData, setNewNoteData] = useState({ title: '', content: '', status: 'Under Progress', time: '' });
+  const [newNoteData, setNewNoteData] = useState({ title: '', content: '', status: 'Under Progress', time: '', subtasks: [] });
 
   // Digital Notebook State
   const [noteSections, setNoteSections] = useState(() => {
@@ -37,6 +42,7 @@ const Notes = () => {
 
   // Mobile Sidebar State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Notification State
   const [activeAlerts, setActiveAlerts] = useState([]);
@@ -73,24 +79,43 @@ const Notes = () => {
   // Helper: Detect and highlight links in text
   const renderContentWithLinks = (content) => {
     if (!content) return null;
+    
+    const boldRegex = /\*\*(.*?)\*\*/g;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
+    
+    // Split by URLs first
     const parts = content.split(urlRegex);
+    
     return parts.map((part, index) => {
       if (urlRegex.test(part)) {
         return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4 decoration-indigo-500/30 font-bold transition-all break-all inline-block"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {part}
-          </a>
+          <div key={`link-wrapper-${index}`} className="my-3 p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl group/link transition-all hover:bg-indigo-500/10">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Play className="w-3 h-3 text-indigo-400" />
+              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">External Resource</span>
+            </div>
+            <a
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white hover:text-indigo-300 underline underline-offset-4 decoration-indigo-500/30 font-bold transition-all break-all text-xs"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {part}
+            </a>
+          </div>
         );
       }
-      return part;
+      
+      // Handle bold text in the non-link parts
+      const boldParts = part.split(boldRegex);
+      return boldParts.map((bp, bi) => {
+        if (bi % 2 === 1) {
+          if (bp === "RESOURCE:") return null; // Hide the marker as we use the wrapper
+          return <strong key={`bold-${index}-${bi}`} className="text-white font-black">{bp}</strong>;
+        }
+        return bp;
+      });
     });
   };
 
@@ -323,8 +348,134 @@ const Notes = () => {
     setNewFolderName('');
     setIsAddingFolder(false);
     setActiveFolderId(newFolder.id);
-    setActiveTab('notes');
+    setActiveTab('tasks');
     setIsSidebarOpen(false);
+  };
+
+  const handleImportPlan = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsImporting(true);
+
+    try {
+      let text = '';
+      if (file.type === 'application/pdf') {
+        const typedarray = new Uint8Array(await file.arrayBuffer());
+        const loadingTask = pdfjsLib.getDocument(typedarray);
+        const pdf = await loadingTask.promise;
+        let fullText = '';
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          let lastY = -1;
+          let pageText = '';
+          
+          // Sort items by vertical position (Y) and then horizontal (X)
+          const sortedItems = content.items.sort((a, b) => {
+            if (Math.abs(b.transform[5] - a.transform[5]) < 2) return a.transform[4] - b.transform[4];
+            return b.transform[5] - a.transform[5];
+          });
+
+          for (let item of sortedItems) {
+            if (lastY !== -1 && Math.abs(item.transform[5] - lastY) > 5) {
+              pageText += '\n';
+            }
+            pageText += (item.str || ' ');
+            lastY = item.transform[5];
+          }
+          fullText += pageText + '\n---\n'; // Page separator
+        }
+        text = fullText;
+      } else {
+        text = await file.text();
+      }
+
+      if (!text || !text.trim()) throw new Error("Could not read text.");
+
+      const dayPattern = /\b(?:Day|DAY)\s*(\d+)/i;
+      const taskPattern = /(?:📋|Task|TASK)\s*(\d+)/i;
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      
+      const rawLines = text.split(/\n/);
+      const newFolders = [];
+      let currentFolder = null;
+      let currentTask = null;
+
+      rawLines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === '---') return;
+
+        const dayMatch = trimmed.match(dayPattern);
+        const taskMatch = trimmed.match(taskPattern);
+
+        if (dayMatch) {
+          // New Day marker found
+          currentTask = null;
+          currentFolder = {
+            id: 'fld-' + Date.now() + Math.random().toString(36).substr(2, 4),
+            name: trimmed.length < 60 ? trimmed : `Day ${dayMatch[1]}`,
+            notes: []
+          };
+          newFolders.push(currentFolder);
+        } 
+        else if (taskMatch) {
+          // If a Task marker is found without a Day, provide a default folder
+          if (!currentFolder) {
+            currentFolder = { id: 'fld-gen-' + Date.now(), name: 'Plan Tasks', notes: [] };
+            newFolders.push(currentFolder);
+          }
+
+          // Create the Task Card
+          const deadline = new Date(Date.now() + 12 * 60 * 60 * 1000);
+          currentTask = {
+            id: 'tsk-' + Math.random().toString(36).substr(2, 9),
+            title: trimmed,
+            content: '',
+            subtasks: [],
+            status: 'Under Progress',
+            time: deadline.toISOString(),
+            totalWorkTime: 0
+          };
+          currentFolder.notes.push(currentTask);
+        } 
+        else if (currentTask) {
+          // Add details to the active task
+          if (trimmed.match(urlRegex)) {
+            currentTask.content += `\n**RESOURCE:** ${trimmed}\n`;
+          } else {
+            const isSubtask = /^[•\-\*\d\.]+/.test(trimmed) || 
+                              trimmed.toLowerCase().startsWith('goal:') || 
+                              trimmed.toLowerCase().startsWith('action:');
+
+            if (isSubtask) {
+              currentTask.subtasks.push({ text: trimmed, completed: false });
+            }
+            
+            let processedLine = trimmed;
+            if (processedLine.toLowerCase().startsWith('goal:') || processedLine.toLowerCase().startsWith('action:')) {
+              processedLine = `\n**${processedLine}**`;
+            }
+            currentTask.content += processedLine + '\n';
+          }
+        }
+      });
+
+      if (newFolders.length > 0) {
+        setFolders(prev => [...prev, ...newFolders]);
+        setActiveFolderId(newFolders[0].id);
+        setActiveTab('tasks');
+        alert(`Successfully imported ${newFolders.length} days with all tasks and sub-tasks.`);
+      } else {
+        alert("The PDF was read, but no 'Day' or 'Task' markers were detected. Check the file text content.");
+      }
+    } catch (error) {
+      console.error("Import Error:", error);
+      alert("Oops! Failed to import: " + error.message);
+    } finally {
+      setIsImporting(false);
+      e.target.value = '';
+    }
   };
 
   const addNote = () => {
@@ -363,7 +514,7 @@ const Notes = () => {
       }));
     }
 
-    setNewNoteData({ title: '', content: '', status: 'Under Progress', time: '' });
+    setNewNoteData({ title: '', content: '', status: 'Under Progress', time: '', subtasks: [] });
     setIsAddingNote(false);
   };
 
@@ -373,7 +524,8 @@ const Notes = () => {
       title: note.title,
       content: note.content,
       status: note.status,
-      time: note.time
+      time: note.time,
+      subtasks: note.subtasks || []
     });
     setIsAddingNote(true);
   };
@@ -401,6 +553,28 @@ const Notes = () => {
           notes: folder.notes.map(n => {
             if (n.id === noteId) return { ...n, status: n.status === 'Completed' ? 'Under Progress' : 'Completed' };
             return n;
+          })
+        };
+      }
+      return folder;
+    }));
+  };
+
+  const toggleSubTask = (folderId, noteId, subTaskIndex) => {
+    setFolders(prev => prev.map(folder => {
+      if (folder.id === folderId) {
+        return {
+          ...folder,
+          notes: folder.notes.map(note => {
+            if (note.id === noteId) {
+              const newSubTasks = [...(note.subtasks || [])];
+              newSubTasks[subTaskIndex] = {
+                ...newSubTasks[subTaskIndex],
+                completed: !newSubTasks[subTaskIndex].completed
+              };
+              return { ...note, subtasks: newSubTasks };
+            }
+            return note;
           })
         };
       }
@@ -585,16 +759,27 @@ const Notes = () => {
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Goal Tracking</span>
-                  <button onClick={() => setIsAddingFolder(true)} className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-400 hover:scale-110 active:scale-90 transition-all"><FolderPlus className="w-4 h-4" /></button>
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Tasks</span>
+                  <div className="flex items-center gap-1">
+                    <label className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-400 hover:bg-indigo-600 hover:text-white transition-all cursor-pointer group/import flex items-center gap-2">
+                      <Import className="w-3.5 h-3.5" />
+                      <span className="hidden group-hover/import:block text-[8px] font-black uppercase">Import Plan</span>
+                      <input type="file" accept=".pdf,.txt" className="hidden" onChange={handleImportPlan} disabled={isImporting}/>
+                    </label>
+                    <button onClick={() => setIsAddingFolder(true)} className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-400 hover:scale-110 active:scale-90 transition-all"><FolderPlus className="w-4 h-4" /></button>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   {isAddingFolder && (
                     <div className="flex items-center gap-2 p-3 bg-slate-900 rounded-2xl border border-indigo-500/50"><input autoFocus type="text" className="w-full bg-transparent border-none text-sm text-slate-200 focus:outline-none font-bold" placeholder="Folder Name" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addFolder()}/><button onClick={() => setIsAddingFolder(false)} className="text-slate-500"><X className="w-4 h-4" /></button></div>
                   )}
                   {folders.map(folder => (
-                    <div key={folder.id} onClick={() => { setActiveFolderId(folder.id); setActiveTab('tasks'); setIsSidebarOpen(false); }} className={`group flex items-center justify-between p-3.5 rounded-2xl cursor-pointer transition-all ${activeTab === 'tasks' && activeFolderId === folder.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800/50'}`}>
-                      <div className="flex items-center gap-3 truncate"><FolderIcon className={`w-4 h-4 shrink-0 ${(activeTab === 'tasks' && activeFolderId === folder.id) ? 'fill-white/20' : 'fill-slate-500/20'}`} /><span className="truncate text-sm font-bold">{folder.name}</span></div>
+                    <div key={folder.id} onClick={() => { setActiveFolderId(folder.id); setActiveTab('tasks'); setIsSidebarOpen(false); }} className={`group flex items-center justify-between p-3.5 rounded-2xl cursor-pointer transition-all ${activeTab === 'tasks' && activeFolderId === folder.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800/50'}`}>
+                      <div className="flex items-center gap-3 truncate">
+                        <FolderIcon className={`w-4 h-4 shrink-0 ${(activeTab === 'tasks' && activeFolderId === folder.id) ? 'fill-white/20' : 'fill-slate-500/20'}`} />
+                        <span className="truncate text-sm font-bold">{folder.name}</span>
+                        {folder.notes.length > 0 && <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${activeTab === 'tasks' && activeFolderId === folder.id ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-500'}`}>{folder.notes.length}d</span>}
+                      </div>
                       <button onClick={(e) => { e.stopPropagation(); deleteFolder(folder.id); }} className={`p-1 transition-all ${activeTab === 'tasks' && activeFolderId === folder.id ? 'opacity-40 hover:opacity-100' : 'opacity-0 group-hover:opacity-100 hover:text-red-400'}`}><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
@@ -603,7 +788,7 @@ const Notes = () => {
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Workspace Notebook</span>
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Notes</span>
                   <button onClick={() => setIsAddingSection(true)} className="p-1.5 bg-violet-500/10 rounded-lg text-violet-400 hover:scale-110 active:scale-90 transition-all"><Plus className="w-4 h-4" /></button>
                 </div>
                 <div className="space-y-1.5">
@@ -663,7 +848,7 @@ const Notes = () => {
                                 <select className="w-full bg-slate-950 border-2 border-slate-800 rounded-xl sm:rounded-[1.5rem] px-4 py-3 sm:px-6 sm:py-4 text-xs font-black uppercase text-indigo-400 appearance-none focus:outline-none focus:border-indigo-500" value={newNoteData.status} onChange={(e) => setNewNoteData({...newNoteData, status: e.target.value})}><option value="Under Progress">Under Progress</option><option value="Completed">Completed</option></select>
                               </div>
                             </div>
-                            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4"><button onClick={addNote} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase text-[10px] tracking-widest py-4 rounded-xl sm:rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2">{editingNoteId ? <Save className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />} {editingNoteId ? 'Update Task' : 'Confirm Task'}</button><button onClick={() => { setIsAddingNote(false); setEditingNoteId(null); setNewNoteData({ title: '', content: '', status: 'Under Progress', time: '' }); }} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-black uppercase text-[10px] tracking-widest py-4 rounded-xl sm:rounded-2xl transition-all">Cancel</button></div>
+                            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4"><button onClick={addNote} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase text-[10px] tracking-widest py-4 rounded-xl sm:rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2">{editingNoteId ? <Save className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />} {editingNoteId ? 'Update Task' : 'Confirm Task'}</button><button onClick={() => { setIsAddingNote(false); setEditingNoteId(null); setNewNoteData({ title: '', content: '', status: 'Under Progress', time: '', subtasks: [] }); }} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-black uppercase text-[10px] tracking-widest py-4 rounded-xl sm:rounded-2xl transition-all">Cancel</button></div>
                           </motion.div>
                         )}
 
@@ -685,9 +870,28 @@ const Notes = () => {
                                 </div>
                               </div>
                               <div className="flex-1 overflow-y-auto max-h-40 sm:max-h-48 pr-2 custom-scrollbar-thin mb-6">
-                                <p className={`text-xs sm:text-sm leading-relaxed ${note.status === 'Completed' ? 'text-slate-600' : 'text-slate-400'} whitespace-pre-wrap`}>
+                                <p className={`text-xs sm:text-sm leading-relaxed ${note.status === 'Completed' ? 'text-slate-600' : 'text-slate-400'} whitespace-pre-wrap mb-4`}>
                                   {renderContentWithLinks(note.content)}
                                 </p>
+                                
+                                {note.subtasks && note.subtasks.length > 0 && (
+                                  <div className="space-y-2">
+                                    {note.subtasks.map((st, idx) => (
+                                      <div 
+                                        key={idx} 
+                                        onClick={() => toggleSubTask(activeFolder.id, note.id, idx)}
+                                        className={`flex items-start gap-3 p-2.5 rounded-xl border transition-all cursor-pointer ${st.completed ? 'bg-emerald-500/5 border-emerald-500/20 opacity-60' : 'bg-slate-800/30 border-slate-700/50 hover:border-indigo-500/40'}`}
+                                      >
+                                        <div className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${st.completed ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                          {st.completed && <CheckCircle2 className="w-3 h-3 text-white" />}
+                                        </div>
+                                        <span className={`text-[11px] font-bold leading-tight ${st.completed ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                                          {st.text}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                               <div className="space-y-3 sm:space-y-4 pt-4 border-t border-slate-800/40">
                                 {note.time && (
@@ -730,7 +934,7 @@ const Notes = () => {
                                         onClick={() => startWorkSession(note.id)} 
                                         className="text-[9px] font-black text-indigo-400 hover:text-white uppercase tracking-tighter flex items-center gap-1 transition-colors"
                                       >
-                                        <Play className="w-3 h-3" /> Start Mode
+                                        <Play className="w-3 h-3" /> Start Tasks
                                       </button>
                                     </div>
                                   )}
